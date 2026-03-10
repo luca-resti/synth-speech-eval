@@ -11,4 +11,4 @@ A multi-scale framework for synthetic speech quality evaluation for quality assu
 **Project Co-Leads**: Luca Resti (University of York), James Walker (University of York)<br>
 **Lead Developer**: Ben Heritage (University of York)
 
-Project supported by the EPSRC and the CoSTAR Network.
+Project supported by the CoSTAR Network via the EPSRC IAA CoSTAR Live Lab Researcher Mobility fund.
