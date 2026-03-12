@@ -1,7 +1,9 @@
-sq_ast :
-  output_dir : ./outputs
-  path : "./inputs/"
-  device : cpu
+output_dir : ./outputs/
+path : ./inputs/
+device : cpu
+
+saliency :
+  saliency_interp_method : bilinear
 
 pdsm:
   k_method : percent
