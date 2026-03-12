@@ -1,0 +1,8 @@
+sq_ast :
+  output_dir : ./outputs
+  path : "./inputs/"
+  device : cpu
+
+pdsm:
+  k_method : percent
+  k : 0.1
