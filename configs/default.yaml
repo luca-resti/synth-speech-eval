@@ -1,10 +1,15 @@
 output_dir : ./outputs/
 path : ./inputs/
 device : cpu
+score_threshold : 3
 
 saliency :
   saliency_interp_method : bilinear
+  output_saliency_overlay : True
 
 pdsm:
   k_method : percent
   k : 0.1
+
+ppg:
+  avg_window_num : 3

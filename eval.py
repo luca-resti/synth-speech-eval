@@ -1,9 +1,16 @@
 from models import sq_ast_mod
+from models import ppgs_wrapper
+from models import pdsm
+
 import sys
 import os
 import yaml
 import pandas as pd
+import numpy as np
 from datetime import datetime
+import matplotlib.pyplot as plt
+import ta_kaldi
+
 
 if __name__ == "__main__":
 
@@ -34,5 +41,70 @@ if __name__ == "__main__":
             "sq_col": sq_ast_pred[i, 3],
             "sq_loud": sq_ast_pred[i, 4]
         }
+
+    ppgs_pred = ppgs_wrapper.get_ppgs(audio_files_txt, config_file)
+    ppgs_dict = ppgs_wrapper.get_ppgs_dict()
+
+    pdsm_info = {
+        "pdsm_sq_mos":[],
+        "pdsm_sq_noi":[],
+        "pdsm_sq_dis":[],
+        "pdsm_sq_col":[],
+        "pdsm_sq_loud":[],
+    }
+
+    for i, (file_idx, file_path) in enumerate(audio_files_txt):
+
+        ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[file_idx][1]]
+
+        for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
+
+            dim = sq_ast_mod.ALL_DIMS[dim_index]
+
+            attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
+                attention_flows[file_idx, dim_index, :, :], 
+                config_file["saliency"]["saliency_interp_method"]
+            )
+            attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
+            attn_rescaled = attn_rescaled[:, :fbank_lengths[file_idx][1]]
+            attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
+
+            dim_pdsm, dim_phon = pdsm.PDSM(
+                attn_rescaled, 
+                ppgs_pred_file,
+                ppgs_dict,
+                np.abs, 
+                np.sum, 
+                config_file["pdsm"]["k_method"],
+                config_file["pdsm"]["k"]
+            )
+
+            pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
+        
+            # save the output images for scores that don't meet the threshold
+            if config_file["saliency"]["output_saliency_overlay"]:
+                if sq_ast_pred[file_idx, dim_index] < config_file["score_threshold"]:
+
+                    # fbank = ta_kaldi.fbank(
+                    #     waveform,
+                    #     sample_frequency=self.sampling_rate,
+                    #     window_type="hanning",
+                    #     num_mel_bins=self.num_mel_bins,
+                    # )
+
+                    # plt.figure(figsize=(15, 20))
+                    # plt.subplot(4, 1, 1)
+                    # plt.imshow(input_spectrogram.T, aspect='auto', origin='lower', cmap='gray')
+                    # plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
+                    # plt.xlim(0, fbank_lengths[file_idx][1])
+                    # plt.ylim(0, 128)
+                    # plt.title('Input Spectrogram')
+
+
+                    pass # TODO: output the saliency map overlays
+        
+    for dim in sq_ast_mod.ALL_DIMS:
+        output_ind_df[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
+        output_ind_df[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
 
     output_ind_df.to_csv(output_ind_csv_path, index=False)
