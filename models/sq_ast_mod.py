@@ -165,7 +165,7 @@ def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
         num_workers=num_workers
     )
 
-    return dl, fbank_lengths, audio_files_txt
+    return dl, ds, fbank_lengths, audio_files_txt
 
 
 def get_scaled_saliency_map(attn_map, saliency_interp_method):
@@ -244,7 +244,7 @@ def sq_ast_fw(config_file):
         device = "cpu"
 
     # create dataset for sq_ast
-    dl, fbank_lengths, audio_files_txt = prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers)
+    dl, ds, fbank_lengths, audio_files_txt = prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers)
     
     # get the predictions and attention flows for each dimension
     predictions, attention_flows = get_pred_attn(dims, dl, device)
@@ -252,6 +252,7 @@ def sq_ast_fw(config_file):
     print(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
 
     return (
+        ds,
         predictions.cpu().numpy(), 
         attention_flows.cpu().numpy(), 
         fbank_lengths, 

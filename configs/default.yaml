@@ -1,7 +1,7 @@
 output_dir : ./outputs/
 path : ./inputs/
 device : cpu
-score_threshold : 3
+score_threshold : 4
 
 saliency :
   saliency_interp_method : bilinear

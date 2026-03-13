@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
-import ta_kaldi
+import torchaudio.compliance.kaldi as ta_kaldi
 
 
 if __name__ == "__main__":
@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     output_ind_df = pd.DataFrame(columns=["file_path", "sq_mos", "sq_noi", "sq_dis", "sq_col", "sq_loud"])
 
-    sq_ast_pred, attention_flows, fbank_lengths, audio_files_txt = sq_ast_mod.sq_ast_fw(config_file)
+    sq_ast_ds, sq_ast_pred, attention_flows, fbank_lengths, audio_files_txt = sq_ast_mod.sq_ast_fw(config_file)
 
     for i, (file_idx, file_path) in enumerate(audio_files_txt):
         output_ind_df.loc[i] = {
@@ -52,6 +52,11 @@ if __name__ == "__main__":
         "pdsm_sq_col":[],
         "pdsm_sq_loud":[],
     }
+
+    if config_file["saliency"]["output_saliency_overlay"]:
+        output_saliency_dir = output_dir + "/" + "saliency_overlay" + "/"
+        if not os.path.exists(output_saliency_dir):
+            os.makedirs(output_saliency_dir)
 
     for i, (file_idx, file_path) in enumerate(audio_files_txt):
 
@@ -85,23 +90,32 @@ if __name__ == "__main__":
             if config_file["saliency"]["output_saliency_overlay"]:
                 if sq_ast_pred[file_idx, dim_index] < config_file["score_threshold"]:
 
-                    # fbank = ta_kaldi.fbank(
-                    #     waveform,
-                    #     sample_frequency=self.sampling_rate,
-                    #     window_type="hanning",
-                    #     num_mel_bins=self.num_mel_bins,
-                    # )
+                    _, mel_spec = sq_ast_ds.__getitem__(file_idx)
 
-                    # plt.figure(figsize=(15, 20))
-                    # plt.subplot(4, 1, 1)
-                    # plt.imshow(input_spectrogram.T, aspect='auto', origin='lower', cmap='gray')
-                    # plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
-                    # plt.xlim(0, fbank_lengths[file_idx][1])
-                    # plt.ylim(0, 128)
-                    # plt.title('Input Spectrogram')
+                    plt.figure(figsize=(15, 10))
+                    plt.subplot(2, 1, 1)
+                    plt.imshow(mel_spec.T, aspect='auto', origin='lower', cmap='gray')
+                    plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
+                    plt.xlim(0, fbank_lengths[file_idx][1])
+                    plt.ylim(0, 128)
+                    for phon in dim_phon:
+                        plt.text((phon[2]+phon[3])*0.5, 128*0.9, phon[1], fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
+                    plt.xlabel("Time in 10ms Frames")
+                    plt.ylabel("Mel Frequency Bin")
 
+                    if config_file["pdsm"]["k_method"] == "threshold":
+                        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred[file_idx, dim_index], 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
+                    elif config_file["pdsm"]["k_method"] == "percent":
+                        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred[file_idx, dim_index], 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
 
-                    pass # TODO: output the saliency map overlays
+                    plt.subplot(2, 1, 2)
+                    plt.imshow(attn_rescaled, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
+                    plt.xlim(0, fbank_lengths[file_idx][1])
+                    plt.ylim(0, 128)
+                    plt.title(f"Attention Rollout for {dim}")
+                    plt.xlabel("Time in 10ms Frames")
+                    plt.ylabel("Mel Frequency Bin")
+                    plt.savefig(os.path.join(output_saliency_dir, f"{file_idx}_{dim}.png"))
         
     for dim in sq_ast_mod.ALL_DIMS:
         output_ind_df[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
