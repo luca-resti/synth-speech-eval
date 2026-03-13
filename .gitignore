@@ -215,3 +215,6 @@ outputs/
 /models/weights/mos.pth
 /models/weights/noi.pth
 .vscode
+/audiomos25/*.wav
+/audiomos25/desktop.ini
+/batch_run.bat

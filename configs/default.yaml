@@ -10,6 +10,8 @@ saliency :
 pdsm:
   k_method : percent
   k : 0.1
+  preprocess : abs
+  pool : mean
 
 ppg:
   avg_window_num : 3

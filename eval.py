@@ -22,7 +22,9 @@ if __name__ == "__main__":
     with open(config_path, 'r') as f:
         config_file = yaml.safe_load(f)
 
-    output_dir = config_file["output_dir"] + "/" + datetime.now().strftime("%Y%m%d_%H%M%S") + "/"
+    start_time = datetime.now()
+
+    output_dir = config_file["output_dir"] + "/" + start_time.strftime("%Y%m%d_%H%M%S") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     output_ind_csv_path = os.path.join(output_dir, "output_individual.csv")
@@ -74,12 +76,20 @@ if __name__ == "__main__":
             attn_rescaled = attn_rescaled[:, :fbank_lengths[file_idx][1]]
             attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
 
+            if config_file["pdsm"]["preprocess"] == "abs":
+                pdsm_preprocess = np.abs
+
+            if config_file["pdsm"]["pool"] == "mean":
+                pdsm_pool = np.mean
+            elif config_file["pdsm"]["pool"] == "sum":
+                pdsm_pool = np.sum
+
             dim_pdsm, dim_phon = pdsm.PDSM(
                 attn_rescaled, 
                 ppgs_pred_file,
                 ppgs_dict,
-                np.abs, 
-                np.sum, 
+                pdsm_preprocess, 
+                pdsm_pool, 
                 config_file["pdsm"]["k_method"],
                 config_file["pdsm"]["k"]
             )
@@ -98,8 +108,12 @@ if __name__ == "__main__":
                     plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
                     plt.xlim(0, fbank_lengths[file_idx][1])
                     plt.ylim(0, 128)
+
+                    y_offset_index = 0
                     for phon in dim_phon:
-                        plt.text((phon[2]+phon[3])*0.5, 128*0.9, phon[1], fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
+                        y_offset =  128*0.9 - 128*0.1*(y_offset_index%8)
+                        plt.text((phon[2]+phon[3])*0.5, y_offset, phon[1], fontdict={"fontsize":6, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
+                        y_offset_index += 1
                     plt.xlabel("Time in 10ms Frames")
                     plt.ylabel("Mel Frequency Bin")
 
@@ -122,3 +136,5 @@ if __name__ == "__main__":
         output_ind_df[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
 
     output_ind_df.to_csv(output_ind_csv_path, index=False)
+
+    print(f"Completed analysis in {str((datetime.now() - start_time))}")
