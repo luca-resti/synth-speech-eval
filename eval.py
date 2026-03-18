@@ -1,6 +1,7 @@
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
+from util import plot_helper
 
 import sys
 import os
@@ -8,8 +9,6 @@ import yaml
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import matplotlib.pyplot as plt
-import torchaudio.compliance.kaldi as ta_kaldi
 
 
 if __name__ == "__main__":
@@ -24,7 +23,7 @@ if __name__ == "__main__":
 
     start_time = datetime.now()
 
-    output_dir = config_file["output_dir"] + "/" + start_time.strftime("%Y%m%d_%H%M%S") + "/"
+    output_dir = config_file["output_dir"] + "/" + config_file["dataset_name"] + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     output_ind_csv_path = os.path.join(output_dir, "output_individual.csv")
@@ -44,8 +43,13 @@ if __name__ == "__main__":
             "sq_loud": sq_ast_pred[i, 4]
         }
 
-    ppgs_pred = ppgs_wrapper.get_ppgs(audio_files_txt, config_file)
-    ppgs_dict = ppgs_wrapper.get_ppgs_dict()
+    output_sysfig_dir = output_dir + "/sys_analysis/"
+    if not os.path.exists(output_sysfig_dir):
+        os.makedirs(output_sysfig_dir)
+
+    plot_helper.plot_sys_violin_plot(config_file, sq_ast_mod.ALL_DIMS, output_ind_df, output_sysfig_dir)
+
+    ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(audio_files_txt, config_file)
 
     pdsm_info = {
         "pdsm_sq_mos":[],
@@ -59,6 +63,8 @@ if __name__ == "__main__":
         output_saliency_dir = output_dir + "/" + "saliency_overlay" + "/"
         if not os.path.exists(output_saliency_dir):
             os.makedirs(output_saliency_dir)
+
+    pdsm_current_time = datetime.now()
 
     for i, (file_idx, file_path) in enumerate(audio_files_txt):
 
@@ -83,6 +89,8 @@ if __name__ == "__main__":
                 pdsm_pool = np.mean
             elif config_file["pdsm"]["pool"] == "sum":
                 pdsm_pool = np.sum
+            elif config_file["pdsm"]["pool"] == "l2_norm":
+                pdsm_pool = pdsm.l2_norm
 
             dim_pdsm, dim_phon = pdsm.PDSM(
                 attn_rescaled, 
@@ -102,39 +110,26 @@ if __name__ == "__main__":
 
                     _, mel_spec = sq_ast_ds.__getitem__(file_idx)
 
-                    plt.figure(figsize=(15, 10))
-                    plt.subplot(2, 1, 1)
-                    plt.imshow(mel_spec.T, aspect='auto', origin='lower', cmap='gray')
-                    plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
-                    plt.xlim(0, fbank_lengths[file_idx][1])
-                    plt.ylim(0, 128)
-
-                    y_offset_index = 0
-                    for phon in dim_phon:
-                        y_offset =  128*0.9 - 128*0.1*(y_offset_index%8)
-                        plt.text((phon[2]+phon[3])*0.5, y_offset, phon[1], fontdict={"fontsize":6, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
-                        y_offset_index += 1
-                    plt.xlabel("Time in 10ms Frames")
-                    plt.ylabel("Mel Frequency Bin")
-
-                    if config_file["pdsm"]["k_method"] == "threshold":
-                        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred[file_idx, dim_index], 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
-                    elif config_file["pdsm"]["k_method"] == "percent":
-                        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred[file_idx, dim_index], 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
-
-                    plt.subplot(2, 1, 2)
-                    plt.imshow(attn_rescaled, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
-                    plt.xlim(0, fbank_lengths[file_idx][1])
-                    plt.ylim(0, 128)
-                    plt.title(f"Attention Rollout for {dim}")
-                    plt.xlabel("Time in 10ms Frames")
-                    plt.ylabel("Mel Frequency Bin")
-                    plt.savefig(os.path.join(output_saliency_dir, f"{file_idx}_{dim}.png"))
+                    plot_helper.plot_saliency_with_pdsm(
+                        file_idx, mel_spec, dim_pdsm, fbank_lengths[file_idx][1], 
+                        dim_phon, config_file, file_path, dim, sq_ast_pred[file_idx, dim_index], 
+                        output_saliency_dir, attn_rescaled
+                    )
         
+    print(f"PDSM processing completed in time: {datetime.now() - pdsm_current_time}")
+
     for dim in sq_ast_mod.ALL_DIMS:
         output_ind_df[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
         output_ind_df[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
 
     output_ind_df.to_csv(output_ind_csv_path, index=False)
 
+    for dim in sq_ast_mod.ALL_DIMS:
+        thresholded_df = output_ind_df[output_ind_df[f"sq_{dim}"] < config_file["score_threshold"]]
+        single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
+        plot_helper.plot_phoneme_hists(
+            single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"]
+        )
+
     print(f"Completed analysis in {str((datetime.now() - start_time))}")
+

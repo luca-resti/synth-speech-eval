@@ -226,12 +226,14 @@ def sq_ast_fw(config_file):
     bs = int(1)
     num_workers = int(0)
 
+    input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
+
     # check whether is a single file or a directory and set paths accordingly
-    if str(config_file["path"]).endswith('.wav'): 
-        wav_path = config_file["path"]
+    if str(input_dir).endswith('.wav'): 
+        wav_path = input_dir
         data_dir = None
     else: 
-        data_dir = config_file["path"]
+        data_dir = input_dir + "/"
         wav_path = None
 
     db_mean = -10.25446422 # calculated from the validation datasets from July 2025

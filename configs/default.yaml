@@ -1,7 +1,10 @@
 output_dir : ./outputs/
 path : ./inputs/
+dataset_name : test
 device : cpu
-score_threshold : 4
+language: en
+
+score_threshold : 4.9
 
 saliency :
   saliency_interp_method : bilinear
@@ -11,7 +14,4 @@ pdsm:
   k_method : percent
   k : 0.1
   preprocess : abs
-  pool : mean
-
-ppg:
-  avg_window_num : 3
+  pool : l2_norm

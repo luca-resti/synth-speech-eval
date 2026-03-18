@@ -1,59 +1,96 @@
-import torch
-import ppgs
 import numpy as np
-
-def get_ppgs_dict():
-    phoneme_dict_in = ppgs.PHONEME_TO_INDEX_MAPPING
-    phoneme_dict_out = {}
-    for phoneme in phoneme_dict_in.keys():
-        phoneme_dict_out[str(phoneme_dict_in[phoneme])] = phoneme
-    return phoneme_dict_out
+import whisperx
+from phonemizer import phonemize
+import numpy as np
+import os
+from datetime import datetime
 
 
-def get_ppgs(audio_files, config_file):
+os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
+
+
+def whisperx_get_ppgs(audio_files, config_file): # (audio_file, device)
+
+    current_time = datetime.now()
 
     # use device from config and check if GPU is available
-    gpu = None
-    if config_file["device"] == "gpu":
-        gpu = 0
-
-    audio_files = audio_files
+    device = "cpu"
+    if config_file["device"] == "gpu": 
+        device = "cuda"
+    
+    model = whisperx.load_model("small", device=device)
+    model_a, metadata = whisperx.load_align_model(
+        language_code=config_file["language"], 
+        device=device, 
+        model_name="facebook/wav2vec2-lv-60-espeak-cv-ft"
+    )
 
     # get ppgs by the batch of audio files
-    batch_audio = torch.zeros((len(audio_files), 1, 10*ppgs.SAMPLE_RATE))
+    batch_audio = np.zeros((len(audio_files), 1, 10*16000), dtype=np.float32)
 
     for _, (index, filename) in enumerate(audio_files):
-        audio = ppgs.load.audio(filename)
+        audio = whisperx.load_audio(filename)
 
         # trim to max length of 10 seconds for ppgs extraction
-        if audio.shape[1] > 10*ppgs.SAMPLE_RATE:
-            audio = audio[:, :10*ppgs.SAMPLE_RATE]
+        if audio.shape[0] > 10*16000:
+            audio = audio[:10*16000]
 
-        batch_audio[index, 0, :audio.shape[1]] = audio
+        batch_audio[index, :, :audio.shape[0]] = audio
 
-    ppgs_out = torch.zeros((len(audio_files), 1, len(ppgs.PHONEMES), 1000))
-    
-    # batch seems to not be working (TODO: come back to this)
+    vocab = metadata["dictionary"] # get the phoneme list
+    phoneme_to_idx = {p: i for i, p in enumerate(vocab)}
+    desired_frame_duration = 0.01 # 10ms to match input mel spectrogram
+    ppgs_out = np.zeros((len(audio_files), 1, len(vocab), 1000))
+    sil_idx = vocab["</s>"]
+
+    output_word_alignment = []
+
+    preproc_time = datetime.now()
+    print(f"WhisperX Preprocessing completed in time: {preproc_time - current_time}")
+
     for _, (index, filename) in enumerate(audio_files):
-        ppgs_out[index, :, :] = ppgs.from_audio(batch_audio[index, :, :], ppgs.SAMPLE_RATE, gpu=gpu)
 
-    ppgs_out = ppgs_out.cpu().detach().numpy()
+        audio = batch_audio[index, 0, :]
+        result = model.transcribe(audio, batch_size=16, chunk_size=2)
 
-    # apply time smoothing (30ms window recommended in doi: 10.1109/ICSPCS.2010.5709770)
-    ppgs_out_avg = np.zeros_like(ppgs_out)
+        result_aligned_words = whisperx.align(
+            result["segments"], model_a, metadata, audio, device, return_char_alignments=False
+        )
+        output_word_alignment.append(result_aligned_words["word_segments"])
 
-    average_window_num = config_file["ppg"]["avg_window_num"]
+        for segment in result["segments"]:
+            segment["text_old"] = segment["text"]#.replace(" ", "<s>").replace(".", "<s>")
+            segment["text"] = phonemize(segment["text"], language='en-us', backend='espeak')
 
-    if average_window_num > 1:
-        for col in range(np.shape(ppgs_out_avg)[0]):
-            for row in range(np.shape(ppgs_out_avg)[2]):
-                ppgs_out_row = ppgs_out[col, 0, row, :]
-                ppgs_out_avg[col, :, row, :] = np.convolve(ppgs_out_row, np.ones(average_window_num)/average_window_num, mode='same')
-    else:
-        ppgs_out_avg = ppgs_out
+        result_aligned = whisperx.align(
+            result["segments"], model_a, metadata, audio, device, return_char_alignments=True
+        )
 
-    ppgs_out_avg = ppgs_out_avg[:, :, :, 1:-1] # remove padding from ppgs
-    ppgs_out_avg = (ppgs_out_avg - ppgs_out_avg.min()) / (ppgs_out_avg.max() - ppgs_out_avg.min() + 1e-8)
-    
-    return ppgs_out_avg
+        for segment in result_aligned["segments"]:
+            for char_data in segment["chars"]:
+                p_label = char_data["char"]
+                if p_label in phoneme_to_idx:
+                    # convert seconds to frame indices
+                    start_f = int(char_data["start"] / (desired_frame_duration))
+                    end_f = int(char_data["end"] / (desired_frame_duration))
+                    
+                    # generate discretized ppg
+                    p_idx = phoneme_to_idx[p_label]
+                    ppgs_out[index, :, p_idx, start_f:end_f] = 1.0
+
+        silences = (np.sum(ppgs_out[index, :, :, :], axis=1) == 0)[0].astype(int)
+        ppgs_out[index, 0, silences, sil_idx] = 1.0
+
+    phoneme_dict_out = {}
+    for phoneme in phoneme_to_idx.keys():
+        phoneme_dict_out[str(phoneme_to_idx[phoneme])] = phoneme
+
+    print(f"WhisperX Transcription and Phonemization completed in time: {datetime.now() - preproc_time}")
+    print(f"WhisperX Overall Usage completed in time: {datetime.now() - current_time}")
+
+    return (
+        ppgs_out[:, :, :, 1:-1], # remove padding
+        phoneme_dict_out,
+        output_word_alignment
+    )
 
