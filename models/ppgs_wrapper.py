@@ -9,9 +9,11 @@ from datetime import datetime
 os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
 
 
-def whisperx_get_ppgs(audio_files, config_file): # (audio_file, device)
+def whisperx_get_ppgs(output_ind_df, config_file): # (audio_file, device)
 
     current_time = datetime.now()
+
+    audio_files = output_ind_df["file_path"]
 
     # use device from config and check if GPU is available
     device = "cpu"
@@ -28,7 +30,7 @@ def whisperx_get_ppgs(audio_files, config_file): # (audio_file, device)
     # get ppgs by the batch of audio files
     batch_audio = np.zeros((len(audio_files), 1, 10*16000), dtype=np.float32)
 
-    for _, (index, filename) in enumerate(audio_files):
+    for index, filename in enumerate(audio_files):
         audio = whisperx.load_audio(filename)
 
         # trim to max length of 10 seconds for ppgs extraction
@@ -48,7 +50,7 @@ def whisperx_get_ppgs(audio_files, config_file): # (audio_file, device)
     preproc_time = datetime.now()
     print(f"WhisperX Preprocessing completed in time: {preproc_time - current_time}")
 
-    for _, (index, filename) in enumerate(audio_files):
+    for index, df_row in output_ind_df.iterrows():
 
         audio = batch_audio[index, 0, :]
         result = model.transcribe(audio, batch_size=16, chunk_size=2)

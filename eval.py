@@ -26,7 +26,8 @@ if __name__ == "__main__":
     output_dir = config_file["output_dir"] + "/" + config_file["dataset_name"] + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    output_ind_csv_path = os.path.join(output_dir, "output_individual.csv")
+    output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
+    output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
 
     output_ind_df = pd.DataFrame(columns=["file_path", "sq_mos", "sq_noi", "sq_dis", "sq_col", "sq_loud"])
 
@@ -49,7 +50,17 @@ if __name__ == "__main__":
 
     plot_helper.plot_sys_violin_plot(config_file, sq_ast_mod.ALL_DIMS, output_ind_df, output_sysfig_dir)
 
-    ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(audio_files_txt, config_file)
+    output_ind_df_thresh = output_ind_df[
+        (output_ind_df["sq_mos"] <= config_file["score_threshold"]) |
+        (output_ind_df["sq_noi"] <= config_file["score_threshold"]) |
+        (output_ind_df["sq_dis"] <= config_file["score_threshold"]) |
+        (output_ind_df["sq_col"] <= config_file["score_threshold"]) |
+        (output_ind_df["sq_loud"] <= config_file["score_threshold"])
+    ]
+    output_ind_df_thresh["index"] = np.arange(len(output_ind_df_thresh))
+    output_ind_df_thresh = output_ind_df_thresh.reset_index(names=["pre_threshold_index"])
+
+    ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
 
     pdsm_info = {
         "pdsm_sq_mos":[],
@@ -66,20 +77,22 @@ if __name__ == "__main__":
 
     pdsm_current_time = datetime.now()
 
-    for i, (file_idx, file_path) in enumerate(audio_files_txt):
+    for file_idx, df_row in output_ind_df_thresh.iterrows():
+        file_path = df_row["file_path"]
+        old_index = df_row["pre_threshold_index"]
 
-        ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[file_idx][1]]
+        ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[old_index][1]]
 
         for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
 
             dim = sq_ast_mod.ALL_DIMS[dim_index]
 
             attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
-                attention_flows[file_idx, dim_index, :, :], 
+                attention_flows[old_index, dim_index, :, :], 
                 config_file["saliency"]["saliency_interp_method"]
             )
             attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
-            attn_rescaled = attn_rescaled[:, :fbank_lengths[file_idx][1]]
+            attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
             attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
 
             if config_file["pdsm"]["preprocess"] == "abs":
@@ -106,26 +119,27 @@ if __name__ == "__main__":
         
             # save the output images for scores that don't meet the threshold
             if config_file["saliency"]["output_saliency_overlay"]:
-                if sq_ast_pred[file_idx, dim_index] < config_file["score_threshold"]:
+                if sq_ast_pred[old_index, dim_index] < config_file["score_threshold"]:
 
-                    _, mel_spec = sq_ast_ds.__getitem__(file_idx)
+                    _, mel_spec = sq_ast_ds.__getitem__(old_index)
 
                     plot_helper.plot_saliency_with_pdsm(
-                        file_idx, mel_spec, dim_pdsm, fbank_lengths[file_idx][1], 
-                        dim_phon, config_file, file_path, dim, sq_ast_pred[file_idx, dim_index], 
+                        old_index, mel_spec, dim_pdsm, fbank_lengths[old_index][1], 
+                        dim_phon, config_file, file_path, dim, sq_ast_pred[old_index, dim_index], 
                         output_saliency_dir, attn_rescaled
                     )
         
     print(f"PDSM processing completed in time: {datetime.now() - pdsm_current_time}")
 
     for dim in sq_ast_mod.ALL_DIMS:
-        output_ind_df[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
-        output_ind_df[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
+        output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
+        output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
 
     output_ind_df.to_csv(output_ind_csv_path, index=False)
+    output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False)
 
     for dim in sq_ast_mod.ALL_DIMS:
-        thresholded_df = output_ind_df[output_ind_df[f"sq_{dim}"] < config_file["score_threshold"]]
+        thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] < config_file["score_threshold"]]
         single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
         plot_helper.plot_phoneme_hists(
             single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"]
