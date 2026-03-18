@@ -1,7 +1,7 @@
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
-from util import plot_helper
+from util import plot_helper, kde_tools
 
 import sys
 import os
@@ -75,6 +75,9 @@ if __name__ == "__main__":
         if not os.path.exists(output_saliency_dir):
             os.makedirs(output_saliency_dir)
 
+    kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(10/0.01)), dtype=np.float32)
+    kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), 128), dtype=np.float32)
+
     pdsm_current_time = datetime.now()
 
     for file_idx, df_row in output_ind_df_thresh.iterrows():
@@ -117,6 +120,10 @@ if __name__ == "__main__":
 
             pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
         
+            kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled)
+            kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
+            kde_y_info[file_idx, dim_index, :] = kde_y
+
             # save the output images for scores that don't meet the threshold
             if config_file["saliency"]["output_saliency_overlay"]:
                 if sq_ast_pred[old_index, dim_index] < config_file["score_threshold"]:
@@ -128,8 +135,19 @@ if __name__ == "__main__":
                         dim_phon, config_file, file_path, dim, sq_ast_pred[old_index, dim_index], 
                         output_saliency_dir, attn_rescaled
                     )
+
+                    plot_helper.plot_saliency_jointgrid(
+                        config_file, attn_rescaled, mel_spec, 
+                        kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
+                        word_alignments[file_idx], old_index, file_path, dim, sq_ast_pred[old_index, dim_index], output_saliency_dir
+                    )
         
-    print(f"PDSM processing completed in time: {datetime.now() - pdsm_current_time}")
+        plot_helper.plot_kde_along_waveform(
+            config_file, kde_x_info[file_idx, :, :fbank_lengths[old_index][1]], sq_ast_mod.ALL_DIMS, file_path, word_alignments[file_idx], 
+            sq_ast_pred[old_index, :], output_saliency_dir, old_index
+        )
+
+    print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_current_time}")
 
     for dim in sq_ast_mod.ALL_DIMS:
         output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]

@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import seaborn as sns
+from scipy import io
 
 def plot_phoneme_hists(single_hist, double_hist, dataset_name, output_sysfig_dir, dim, thresh_val):
     if single_hist is not None:
@@ -56,7 +58,7 @@ def plot_saliency_with_pdsm(
     plt.title(f"Attention Rollout for {dim}")
     plt.xlabel("Time in 10ms Frames")
     plt.ylabel("Mel Frequency Bin")
-    plt.savefig(os.path.join(output_saliency_dir, f"{file_idx}_{dim}.png"))
+    plt.savefig(os.path.join(output_saliency_dir, f"Phoneme_{file_idx}_{dim}.png"))
     plt.clf()
     plt.close()
 
@@ -93,3 +95,155 @@ def plot_sys_violin_plot(config_file, dims, output_ind_df, output_sysfig_dir):
     plt.close()
 
     return 0
+
+
+def plot_saliency_jointgrid(
+        config_file, saliency_map, spectrogram, kde_x_est, kde_y_est, result_word_alignment, 
+        file_idx, file_path, dim, sq_ast_pred_i, output_saliency_dir
+    ):
+
+    h, w = saliency_map.shape
+    x_flat = np.arange(w)
+    y_flat = np.arange(h)
+
+    g = sns.JointGrid(height=5, ratio=5, space=0.1)
+    g.fig.set_size_inches(15, 5)
+    g.ax_joint.imshow(spectrogram.T, aspect='auto', cmap='gray', origin='lower')
+    g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.1)
+    g.ax_joint.set_xticks(
+        [i/(2*0.01) for i in range(int(np.ceil(spectrogram.shape[1]*2*0.01)))], 
+        [i/2 for i in range(int(np.ceil(spectrogram.shape[1]*2*0.01)))]
+    )
+    g.ax_joint.set_xlabel("Time in Seconds")
+    g.ax_joint.set_ylabel("Mel Frequency Bins")
+    
+    last_end = 0
+    for word_segment in result_word_alignment:
+        if int(word_segment["start"]/0.01) != last_end:
+            g.ax_joint.plot(
+                [int(word_segment["start"]/0.01), int(word_segment["start"]/0.01)], 
+                [0, 128], 
+                c="black", 
+                alpha=0.5
+            )
+        g.ax_joint.plot(
+            [int(word_segment["end"]/0.01), int(word_segment["end"]/0.01)], 
+            [0, 128], 
+            c="black", 
+            alpha=0.5
+        )
+        last_end = int(word_segment["end"]/0.01)
+        g.ax_joint.text(
+            (int(word_segment["start"]/0.01) + int(word_segment["end"]/0.01))*0.5, 
+            128*0.95, 
+            word_segment["word"], 
+            fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+        )
+
+    g.ax_marg_x.plot(x_flat, kde_x_est)
+    g.ax_marg_y.plot(kde_y_est, y_flat)
+
+    g.ax_joint.set_xlim(0, w)
+    g.ax_joint.set_ylim(0, h)
+    if config_file["pdsm"]["k_method"] == "threshold":
+        g.fig.suptitle(
+            f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
+            fontsize=16, y=1.03
+        )
+    elif config_file["pdsm"]["k_method"] == "percent":
+        g.fig.suptitle(
+            f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
+            fontsize=16, y=1.03
+        )
+
+    plt.savefig(os.path.join(output_saliency_dir, f"KDE_Word_{file_idx}_{dim}.png"), bbox_inches='tight')
+    plt.close()
+
+    return 0
+
+
+def plot_kde_along_waveform(
+        config_file, time_kdes, all_dims, wav_path, result_word_alignment, 
+        sq_ast_scores, output_saliency_dir, file_idx
+    ):
+
+    fs_test, audio_test = io.wavfile.read(wav_path)
+    fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
+    
+    for dim_index in range(len(all_dims)):
+        dim = all_dims[dim_index]
+        if sq_ast_scores[dim_index] <= config_file["score_threshold"]:
+            time_kde_rescaled = np.interp(
+                np.linspace(0, len(time_kdes[dim_index]), len(audio_test)), 
+                np.linspace(0, len(time_kdes[dim_index]), len(time_kdes[dim_index])), 
+                time_kdes[dim_index]
+            )
+            time_kde_rescaled = time_kde_rescaled/np.max(time_kde_rescaled)
+            axs[0].plot(time_kde_rescaled, label=dim)
+    
+    axs[0].set_xlim(0, len(time_kde_rescaled))
+    axs[0].set_xticks([0], [None])
+    axs[0].axis("off")
+    axs[0].set_yticks([0], [None])
+    axs[0].set_ylim(0, 1.05) # extra 5%
+
+    last_end = 0
+    for word_segment in result_word_alignment:
+        if word_segment["start"]*fs_test != last_end:
+            axs[0].plot(
+                [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                [0, np.max(time_kde_rescaled)*1.05], 
+                c="black", 
+                alpha=0.5
+            )
+        axs[0].plot(
+            [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
+            [0, np.max(time_kde_rescaled)*1.05], 
+            c="black", 
+            alpha=0.5
+        )
+        last_end = word_segment["end"]*fs_test
+
+    axs[0].legend(
+        bbox_to_anchor=[0.0, 0.0], loc='bottom left', 
+        fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+    )
+
+    axs[1].plot(audio_test)
+
+    last_end = 0
+    for word_segment in result_word_alignment:
+        if word_segment["start"]*fs_test != last_end:
+            axs[1].plot(
+                [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                [-1, +1], 
+                c="black", 
+                alpha=0.5
+            )
+        axs[1].plot(
+            [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
+            [-1, +1], 
+            c="black", 
+            alpha=0.5
+        )
+        last_end = word_segment["end"]*fs_test
+
+        axs[1].text(
+            (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
+            1.1, 
+            word_segment["word"], 
+            fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+        )
+
+    axs[1].set_ylim(-1, 1)
+    axs[1].set_xlim(0, len(audio_test))
+    axs[1].set_xticks([i*fs_test/2 for i in range(int(len(audio_test)*2/fs_test))], [i/2 for i in range(int(len(audio_test)*2/fs_test))])
+    axs[1].set_xlabel("Time in seconds")
+    axs[1].set_ylabel("Amplitude")
+    axs[1].set_yticks([0], [None])
+
+    plt.suptitle(f"File: {wav_path}, Importance over Time For Sound Quality Metrics")
+
+    plt.savefig(os.path.join(output_saliency_dir, f"KDE_Time_Word_{file_idx}.png"), bbox_inches='tight')
+    plt.close()
+
