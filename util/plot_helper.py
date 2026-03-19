@@ -119,26 +119,27 @@ def plot_saliency_jointgrid(
     
     last_end = 0
     for word_segment in result_word_alignment:
-        if int(word_segment["start"]/0.01) != last_end:
+        if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
+            if int(word_segment["start"]/0.01) != last_end:
+                g.ax_joint.plot(
+                    [int(word_segment["start"]/0.01), int(word_segment["start"]/0.01)], 
+                    [0, 128], 
+                    c="black", 
+                    alpha=0.5
+                )
             g.ax_joint.plot(
-                [int(word_segment["start"]/0.01), int(word_segment["start"]/0.01)], 
+                [int(word_segment["end"]/0.01), int(word_segment["end"]/0.01)], 
                 [0, 128], 
                 c="black", 
                 alpha=0.5
             )
-        g.ax_joint.plot(
-            [int(word_segment["end"]/0.01), int(word_segment["end"]/0.01)], 
-            [0, 128], 
-            c="black", 
-            alpha=0.5
-        )
-        last_end = int(word_segment["end"]/0.01)
-        g.ax_joint.text(
-            (int(word_segment["start"]/0.01) + int(word_segment["end"]/0.01))*0.5, 
-            128*0.95, 
-            word_segment["word"], 
-            fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
-        )
+            last_end = int(word_segment["end"]/0.01)
+            g.ax_joint.text(
+                (int(word_segment["start"]/0.01) + int(word_segment["end"]/0.01))*0.5, 
+                128*0.95, 
+                word_segment["word"], 
+                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+            )
 
     g.ax_marg_x.plot(x_flat, kde_x_est)
     g.ax_marg_y.plot(kde_y_est, y_flat)
@@ -189,51 +190,52 @@ def plot_kde_along_waveform(
 
     last_end = 0
     for word_segment in result_word_alignment:
-        if word_segment["start"]*fs_test != last_end:
+        if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
+            if word_segment["start"]*fs_test != last_end:
+                axs[0].plot(
+                    [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                    [0, np.max(time_kde_rescaled)*1.05], 
+                    c="black", 
+                    alpha=0.5
+                )
             axs[0].plot(
-                [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
                 [0, np.max(time_kde_rescaled)*1.05], 
                 c="black", 
                 alpha=0.5
             )
-        axs[0].plot(
-            [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
-            [0, np.max(time_kde_rescaled)*1.05], 
-            c="black", 
-            alpha=0.5
-        )
-        last_end = word_segment["end"]*fs_test
+            last_end = word_segment["end"]*fs_test
 
     axs[0].legend(
-        bbox_to_anchor=[0.0, 0.0], loc='bottom left', 
-        fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+        bbox_to_anchor=[0.0, 0.0], loc='lower left', fontsize=9
     )
 
     axs[1].plot(audio_test)
 
     last_end = 0
     for word_segment in result_word_alignment:
-        if word_segment["start"]*fs_test != last_end:
+        if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
+            if word_segment["start"]*fs_test != last_end:
+                axs[1].plot(
+                    [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                    [-1, +1], 
+                    c="black", 
+                    alpha=0.5
+                )
             axs[1].plot(
-                [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
                 [-1, +1], 
                 c="black", 
                 alpha=0.5
             )
-        axs[1].plot(
-            [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
-            [-1, +1], 
-            c="black", 
-            alpha=0.5
-        )
-        last_end = word_segment["end"]*fs_test
+            last_end = word_segment["end"]*fs_test
 
-        axs[1].text(
-            (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
-            1.1, 
-            word_segment["word"], 
-            fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
-        )
+            axs[1].text(
+                (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
+                1.1, 
+                word_segment["word"], 
+                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+            )
 
     axs[1].set_ylim(-1, 1)
     axs[1].set_xlim(0, len(audio_test))
