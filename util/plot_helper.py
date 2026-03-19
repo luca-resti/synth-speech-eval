@@ -4,21 +4,33 @@ import numpy as np
 import seaborn as sns
 from scipy import io
 
+MAX_PHONEME_PLOT = 10
+
 def plot_phoneme_hists(single_hist, double_hist, dataset_name, output_sysfig_dir, dim, thresh_val):
     if single_hist is not None:
         plt.figure(figsize=(15, 5))
-        plt.bar(single_hist.keys(), single_hist.values(), color='skyblue')
+        single_hist_len = len(list(single_hist.keys()))
+        if single_hist_len > MAX_PHONEME_PLOT:
+            plt.bar(list(single_hist.keys())[:MAX_PHONEME_PLOT], list(single_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
+            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phonemes at Threshold Value {thresh_val} for {dim}')
+        else:
+            plt.bar(list(single_hist.keys()), list(single_hist.values()), color='skyblue')
+            plt.title(f'{dataset_name}: Proportions of {single_hist_len} most Important Phonemes at Threshold Value {thresh_val} for {dim}')
         plt.ylabel('Proportion of Important Phonemes')
-        plt.title(f'{dataset_name}: Proportions of Phonemes Deemed Important at Threshold Value {thresh_val} for {dim}')
         plt.savefig(os.path.join(output_sysfig_dir, f"sys_single_hist_{dim}.png"))
         plt.clf()
         plt.close()
 
     if double_hist is not None:
         plt.figure(figsize=(15, 5))
-        plt.bar(double_hist.keys(), double_hist.values(), color='skyblue')
+        double_hist_len = len(list(double_hist.keys()))
+        if double_hist_len > MAX_PHONEME_PLOT:
+            plt.bar(list(double_hist.keys())[:MAX_PHONEME_PLOT], list(double_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
+            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {dim}')
+        else:
+            plt.bar(list(double_hist.keys()), list(double_hist.values()), color='skyblue')
+            plt.title(f'{dataset_name}: Proportions of {double_hist_len} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {dim}')
         plt.ylabel('Proportion of Important Phonemes')
-        plt.title(f'{dataset_name}: Proportions of Phoneme-Pairs Deemed Important at Threshold Value {thresh_val} for {dim}')
         plt.savefig(os.path.join(output_sysfig_dir, f"sys_double_hist_{dim}.png"))
         plt.clf()
         plt.close()
@@ -169,6 +181,7 @@ def plot_kde_along_waveform(
     ):
 
     fs_test, audio_test = io.wavfile.read(wav_path)
+    audio_test = (audio_test.astype(np.float32))/np.abs(np.max(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
     for dim_index in range(len(all_dims)):
@@ -249,3 +262,4 @@ def plot_kde_along_waveform(
     plt.savefig(os.path.join(output_saliency_dir, f"KDE_Time_Word_{file_idx}.png"), bbox_inches='tight')
     plt.close()
 
+    return 0
