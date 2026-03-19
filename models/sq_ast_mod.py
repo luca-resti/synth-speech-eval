@@ -48,11 +48,11 @@ class ASTXL(torch.nn.Module):
 
             pred = self.fc(hidden_state).squeeze()
             
-            return pred, attentions
+            return pred, attentions[0]
         else:
             hidden_state = self.ast(features, output_attentions=False).pooler_output
             pred = self.fc(hidden_state).squeeze()
-            return pred, attentions
+            return pred, attentions[0]
     
 
 class ASTVal(Dataset):
@@ -158,6 +158,8 @@ def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
 
         ds = ASTVal(df, os.path.dirname(wav_path), db_mean, db_std)
 
+    print(f"Running SQ_AST Inference on {len(audio_files_txt)} audio files.")
+
     dl = DataLoader(
         dataset=ds,
         batch_size=bs,
@@ -190,30 +192,36 @@ def tensor_attention_flow(attn_maps):
     return cls_flow[2:] # remove <CLS> and <DISTILL>
 
 
-def get_pred_attn(dims, dl, device):
+def get_pred_attn(dims, dl, device, bs, threshold_value):
     
-    attention_flows = torch.Tensor(np.zeros(shape=(dl.__len__(), len(dims), 12, 101)))
-    predictions = torch.Tensor(np.zeros(shape=(dl.__len__(), len(dims))))
+    attention_flows = torch.Tensor(np.zeros(shape=(dl.__len__()*bs, len(dims), 12, 101)))
+    predictions = torch.Tensor(np.zeros(shape=(dl.__len__()*bs, len(dims))))
 
     for dim_index in range(len(dims)):
         dim = dims[dim_index]
             
         with torch.no_grad():
-            model = ASTXL()
-            model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
-            model.to(device)
-            model.eval()
+            with torch.inference_mode():
+                model = ASTXL()
+                model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
+                model.to(device)
+                model.eval()
 
-            for _, (index, batch_features) in enumerate(dl):
-                
-                batch_features = batch_features.float().to(device)
-
-                pred, attentions = model(batch_features, output_attentions=True)
-
-                predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
-
-                attention_flow = tensor_attention_flow(attentions[0][0].cpu().detach())
-                attention_flows[index, dim_index, :, :] = attention_flow.reshape(12, 101)
+                for batch_index, (index, batch_features) in enumerate(dl):
+                    batch_features = batch_features.float().to(device)
+                    pred, attentions = model(batch_features, output_attentions=True)
+                    attentions = attentions.cpu().detach()
+                    if bs == 1:
+                        predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
+                        if 4*pred + 1 <= threshold_value:
+                            attention_flow = tensor_attention_flow(attentions[0].cpu().detach())
+                            attention_flows[index, dim_index, :, :] = attention_flow.reshape(12, 101)
+                    else:
+                        for i in index:
+                            predictions[i, dim_index] = 4*pred[i-int(bs*batch_index)] + 1 # store prediction for this SQ dimension
+                            if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
+                                attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
+                                attention_flows[i, dim_index, :, :] = attention_flow.reshape(12, 101)
 
     return predictions, attention_flows
 
@@ -223,7 +231,7 @@ def sq_ast_fw(config_file):
     current_time = datetime.now()
     output_dir = config_file["output_dir"]
     dims = ALL_DIMS
-    bs = int(1)
+    bs = int(config_file["sq_ast"]["batch_size"])
     num_workers = int(0)
 
     input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
@@ -245,11 +253,13 @@ def sq_ast_fw(config_file):
     else:
         device = "cpu"
 
+    print(f"Starting SQ_AST Preprocessing")
+
     # create dataset for sq_ast
     dl, ds, fbank_lengths, audio_files_txt = prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers)
-    
+
     # get the predictions and attention flows for each dimension
-    predictions, attention_flows = get_pred_attn(dims, dl, device)
+    predictions, attention_flows = get_pred_attn(dims, dl, device, bs, config_file["score_threshold"])
 
     print(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
 
@@ -260,3 +270,4 @@ def sq_ast_fw(config_file):
         fbank_lengths, 
         audio_files_txt
     )
+

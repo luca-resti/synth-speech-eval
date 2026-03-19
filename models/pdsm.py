@@ -1,6 +1,14 @@
 import numpy as np
 
 
+THRESHOLD_VALUE = 0.4
+
+def thresh_abs(x):
+    out_x = np.abs(x)
+    out_x[out_x < THRESHOLD_VALUE] = 0.0
+    return out_x
+
+
 def l2_norm(x):
     return np.power(np.sum(np.power(x, 2)), 1/2)
 

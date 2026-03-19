@@ -9,6 +9,8 @@ import yaml
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import warnings
+warnings.filterwarnings("ignore")
 
 
 if __name__ == "__main__":
@@ -87,47 +89,49 @@ if __name__ == "__main__":
         ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[old_index][1]]
 
         for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
-
             dim = sq_ast_mod.ALL_DIMS[dim_index]
 
-            attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
-                attention_flows[old_index, dim_index, :, :], 
-                config_file["saliency"]["saliency_interp_method"]
-            )
-            attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
-            attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
-            attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
+            if sq_ast_pred[old_index, dim_index] <= config_file["score_threshold"]:
 
-            if config_file["pdsm"]["preprocess"] == "abs":
-                pdsm_preprocess = np.abs
+                attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
+                    attention_flows[old_index, dim_index, :, :], 
+                    config_file["saliency"]["saliency_interp_method"]
+                )
+                attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
+                attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
+                attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
 
-            if config_file["pdsm"]["pool"] == "mean":
-                pdsm_pool = np.mean
-            elif config_file["pdsm"]["pool"] == "sum":
-                pdsm_pool = np.sum
-            elif config_file["pdsm"]["pool"] == "l2_norm":
-                pdsm_pool = pdsm.l2_norm
+                if config_file["pdsm"]["preprocess"] == "abs":
+                    pdsm_preprocess = np.abs
+                elif config_file["pdsm"]["preprocess"] == "thresh_abs":
+                    pdsm_preprocess = pdsm.thresh_abs
 
-            dim_pdsm, dim_phon = pdsm.PDSM(
-                attn_rescaled, 
-                ppgs_pred_file,
-                ppgs_dict,
-                pdsm_preprocess, 
-                pdsm_pool, 
-                config_file["pdsm"]["k_method"],
-                config_file["pdsm"]["k"]
-            )
+                if config_file["pdsm"]["pool"] == "mean":
+                    pdsm_pool = np.mean
+                elif config_file["pdsm"]["pool"] == "sum":
+                    pdsm_pool = np.sum
+                elif config_file["pdsm"]["pool"] == "l2_norm":
+                    pdsm_pool = pdsm.l2_norm
 
-            pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
-        
-            kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled)
-            kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
-            kde_y_info[file_idx, dim_index, :] = kde_y
+                dim_pdsm, dim_phon = pdsm.PDSM(
+                    attn_rescaled, 
+                    ppgs_pred_file,
+                    ppgs_dict,
+                    pdsm_preprocess, 
+                    pdsm_pool, 
+                    config_file["pdsm"]["k_method"],
+                    config_file["pdsm"]["k"]
+                )
 
-            # save the output images for scores that don't meet the threshold
-            if config_file["saliency"]["output_saliency_overlay"]:
-                if sq_ast_pred[old_index, dim_index] < config_file["score_threshold"]:
+                pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
+            
+                kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled)
+                kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
+                kde_y_info[file_idx, dim_index, :] = kde_y
 
+                # save the output images for scores that don't meet the threshold
+                if config_file["saliency"]["output_saliency_overlay"]:
+                
                     _, mel_spec = sq_ast_ds.__getitem__(old_index)
 
                     plot_helper.plot_saliency_with_pdsm(
@@ -141,6 +145,9 @@ if __name__ == "__main__":
                         kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
                         word_alignments[file_idx], old_index, file_path, dim, sq_ast_pred[old_index, dim_index], output_saliency_dir
                     )
+
+            else:
+                pdsm_info[f"pdsm_sq_{dim}"].append([]) # store dummy phoneme information
         
         plot_helper.plot_kde_along_waveform(
             config_file, kde_x_info[file_idx, :, :fbank_lengths[old_index][1]], sq_ast_mod.ALL_DIMS, file_path, word_alignments[file_idx], 
@@ -157,7 +164,7 @@ if __name__ == "__main__":
     output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False)
 
     for dim in sq_ast_mod.ALL_DIMS:
-        thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] < config_file["score_threshold"]]
+        thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
         single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
         plot_helper.plot_phoneme_hists(
             single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"]

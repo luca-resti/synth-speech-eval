@@ -10,8 +10,14 @@ saliency :
   saliency_interp_method : bilinear
   output_saliency_overlay : True
 
-pdsm:
+pdsm :
   k_method : percent
   k : 0.1
   preprocess : abs
   pool : l2_norm
+
+sq_ast :
+  batch_size : 16
+
+whisperx :
+  batch_size : 32
