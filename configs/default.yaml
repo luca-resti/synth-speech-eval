@@ -8,7 +8,6 @@ score_threshold : 3
 
 saliency :
   saliency_interp_method : bilinear
-  output_saliency_overlay : True
 
 pdsm :
   k_method : percent
@@ -21,3 +20,19 @@ sq_ast :
 
 whisperx :
   batch_size : 32
+
+kde : 
+  bw_method : 0.05
+
+plots : 
+  output_pdsm_saliency_overlay : True
+  output_joint_kde : True
+  output_time_kde : True
+
+  output_asr_confidence : True
+  output_sys_violin : True
+  output_freq_kde : True
+  
+  output_phoneme_hist : True
+  output_double_phoneme_hist : True
+  

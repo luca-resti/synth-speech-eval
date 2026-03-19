@@ -6,8 +6,12 @@ from scipy import io
 
 MAX_PHONEME_PLOT = 10
 
-def plot_phoneme_hists(single_hist, double_hist, dataset_name, output_sysfig_dir, dim, thresh_val):
-    if single_hist is not None:
+def plot_phoneme_hists(
+        single_hist, double_hist, dataset_name, output_sysfig_dir, dim, thresh_val,
+        output_phoneme_hist, output_double_phoneme_hist
+    ):
+
+    if (single_hist is not None) and (output_phoneme_hist):
         plt.figure(figsize=(15, 5))
         single_hist_len = len(list(single_hist.keys()))
         if single_hist_len > MAX_PHONEME_PLOT:
@@ -21,7 +25,7 @@ def plot_phoneme_hists(single_hist, double_hist, dataset_name, output_sysfig_dir
         plt.clf()
         plt.close()
 
-    if double_hist is not None:
+    if (double_hist is not None) and (output_double_phoneme_hist):
         plt.figure(figsize=(15, 5))
         double_hist_len = len(list(double_hist.keys()))
         if double_hist_len > MAX_PHONEME_PLOT:
@@ -55,13 +59,9 @@ def plot_saliency_with_pdsm(
         y_offset =  128*0.9 - 128*0.1*(y_offset_index%8)
         plt.text((phon[2]+phon[3])*0.5, y_offset, phon[1], fontdict={"fontsize":6, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
         y_offset_index += 1
+    plt.title("Mel-Spectrogram With Most Important Phonemes")
     plt.xlabel("Time in 10ms Frames")
     plt.ylabel("Mel Frequency Bin")
-
-    if config_file["pdsm"]["k_method"] == "threshold":
-        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
-    elif config_file["pdsm"]["k_method"] == "percent":
-        plt.title(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
 
     plt.subplot(2, 1, 2)
     plt.imshow(attn_rescaled, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
@@ -70,6 +70,12 @@ def plot_saliency_with_pdsm(
     plt.title(f"Attention Rollout for {dim}")
     plt.xlabel("Time in 10ms Frames")
     plt.ylabel("Mel Frequency Bin")
+
+    if config_file["pdsm"]["k_method"] == "threshold":
+        plt.suptitle(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
+    elif config_file["pdsm"]["k_method"] == "percent":
+        plt.suptitle(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
+
     plt.savefig(os.path.join(output_saliency_dir, f"Phoneme_{file_idx}_{dim}.png"))
     plt.clf()
     plt.close()
@@ -123,8 +129,8 @@ def plot_saliency_jointgrid(
     g.ax_joint.imshow(spectrogram.T, aspect='auto', cmap='gray', origin='lower')
     g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.1)
     g.ax_joint.set_xticks(
-        [i/(2*0.01) for i in range(int(np.ceil(spectrogram.shape[1]*2*0.01)))], 
-        [i/2 for i in range(int(np.ceil(spectrogram.shape[1]*2*0.01)))]
+        [i/(2*0.01) for i in range(int(np.ceil(spectrogram.shape[1]/(2*0.01))))], 
+        [i/2 for i in range(int(np.ceil(spectrogram.shape[1]/(2*0.01))))]
     )
     g.ax_joint.set_xlabel("Time in Seconds")
     g.ax_joint.set_ylabel("Mel Frequency Bins")
@@ -263,3 +269,114 @@ def plot_kde_along_waveform(
     plt.close()
 
     return 0
+
+
+def plot_asr_confidence_along_waveform(
+        config_file,  wav_path, result_word_alignment, output_saliency_dir, file_idx
+    ):
+
+    fs_test, audio_test = io.wavfile.read(wav_path)
+    audio_test = (audio_test.astype(np.float32))/np.abs(np.max(audio_test))
+    fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
+    
+    confidence = np.zeros(shape=(len(audio_test)), dtype=np.float32)
+
+    last_end = 0
+    for word_segment in result_word_alignment:
+
+        if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
+
+            confidence[int(word_segment["start"]*fs_test):int(word_segment["end"]*fs_test)] = np.float32(word_segment["score"])
+
+            if word_segment["start"]*fs_test != last_end:
+                axs[0].plot(
+                    [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                    [0, 1.05], 
+                    c="black", 
+                    alpha=0.5
+                )
+            axs[0].plot(
+                [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
+                [0, 1.05], 
+                c="black", 
+                alpha=0.5
+            )
+            last_end = word_segment["end"]*fs_test
+
+    axs[0].plot(confidence, label="ASR Confidence")
+    
+    axs[0].set_xlim(0, len(audio_test))
+    axs[0].set_xticks([0], [None])
+    axs[0].axis("off")
+    axs[0].set_yticks([0], [None])
+    axs[0].set_ylim(0, 1.05) # extra 5%
+
+    axs[0].legend(
+        bbox_to_anchor=[0.0, 0.0], loc='lower left', fontsize=9
+    )
+    
+    axs[1].plot(audio_test)
+
+    last_end = 0
+    for word_segment in result_word_alignment:
+        if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
+            if word_segment["start"]*fs_test != last_end:
+                axs[1].plot(
+                    [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
+                    [-1, +1], 
+                    c="black", 
+                    alpha=0.5
+                )
+            axs[1].plot(
+                [word_segment["end"]*fs_test, word_segment["end"]*fs_test], 
+                [-1, +1], 
+                c="black", 
+                alpha=0.5
+            )
+            last_end = word_segment["end"]*fs_test
+
+            axs[1].text(
+                (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
+                1.1, 
+                word_segment["word"], 
+                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+            )
+
+    axs[1].set_ylim(-1, 1)
+    axs[1].set_xlim(0, len(audio_test))
+    axs[1].set_xticks([i*fs_test/2 for i in range(int(len(audio_test)*2/fs_test))], [i/2 for i in range(int(len(audio_test)*2/fs_test))])
+    axs[1].set_xlabel("Time in seconds")
+    axs[1].set_ylabel("Amplitude")
+    axs[1].set_yticks([0], [None])
+
+    plt.suptitle(f"File: {wav_path}, ASR Confidence For Each Word")
+
+    plt.savefig(os.path.join(output_saliency_dir, f"ASR_Confidence_{file_idx}.png"), bbox_inches='tight')
+    plt.close()
+
+    return 0
+
+
+def plot_kde_for_freq_sys(
+        config_file, kde_freq, all_dims, output_sysfig_dir
+):
+    
+    if np.any(kde_freq):
+        plt.figure(figsize=(10, 5))
+        max_val = 0
+        for dim_index in range(len(all_dims)):
+            temp_agg = np.sum(kde_freq[:, dim_index, :], axis=0)
+            if np.any(temp_agg):
+                temp_agg = temp_agg/np.sum(temp_agg)
+                if np.max(temp_agg) > max_val:
+                    max_val = np.max(temp_agg)
+                plt.plot(temp_agg, label=all_dims[dim_index])
+        plt.legend()
+        plt.xlabel("Mel Frequency Bin")
+        plt.xlim(0, 128)
+        plt.ylim(0, max_val*1.05)
+        plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System")
+        plt.savefig(os.path.join(output_sysfig_dir, f"Frequency_KDE_For_Dims.png"))
+
+    return 0
+

@@ -50,7 +50,8 @@ if __name__ == "__main__":
     if not os.path.exists(output_sysfig_dir):
         os.makedirs(output_sysfig_dir)
 
-    plot_helper.plot_sys_violin_plot(config_file, sq_ast_mod.ALL_DIMS, output_ind_df, output_sysfig_dir)
+    if config_file["plots"]["output_sys_violin"]:
+        plot_helper.plot_sys_violin_plot(config_file, sq_ast_mod.ALL_DIMS, output_ind_df, output_sysfig_dir)
 
     output_ind_df_thresh = output_ind_df[
         (output_ind_df["sq_mos"] <= config_file["score_threshold"]) |
@@ -62,113 +63,130 @@ if __name__ == "__main__":
     output_ind_df_thresh["index"] = np.arange(len(output_ind_df_thresh))
     output_ind_df_thresh = output_ind_df_thresh.reset_index(names=["pre_threshold_index"])
 
-    ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
+    if len(output_ind_df_thresh) > 0:
 
-    pdsm_info = {
-        "pdsm_sq_mos":[],
-        "pdsm_sq_noi":[],
-        "pdsm_sq_dis":[],
-        "pdsm_sq_col":[],
-        "pdsm_sq_loud":[],
-    }
+        ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
 
-    if config_file["saliency"]["output_saliency_overlay"]:
-        output_saliency_dir = output_dir + "/" + "saliency_overlay" + "/"
-        if not os.path.exists(output_saliency_dir):
-            os.makedirs(output_saliency_dir)
+        pdsm_info = {
+            "pdsm_sq_mos":[],
+            "pdsm_sq_noi":[],
+            "pdsm_sq_dis":[],
+            "pdsm_sq_col":[],
+            "pdsm_sq_loud":[],
+        }
 
-    kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(10/0.01)), dtype=np.float32)
-    kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), 128), dtype=np.float32)
+        output_individual_dir = output_dir + "/" + "individual_plots" + "/"
+        if not os.path.exists(output_individual_dir):
+            os.makedirs(output_individual_dir)
 
-    pdsm_current_time = datetime.now()
+        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(10/0.01)), dtype=np.float32)
+        kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), 128), dtype=np.float32)
 
-    for file_idx, df_row in output_ind_df_thresh.iterrows():
-        file_path = df_row["file_path"]
-        old_index = df_row["pre_threshold_index"]
+        pdsm_current_time = datetime.now()
 
-        ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[old_index][1]]
+        for file_idx, df_row in output_ind_df_thresh.iterrows():
+            file_path = df_row["file_path"]
+            old_index = df_row["pre_threshold_index"]
 
-        for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
-            dim = sq_ast_mod.ALL_DIMS[dim_index]
+            ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[old_index][1]]
 
-            if sq_ast_pred[old_index, dim_index] <= config_file["score_threshold"]:
+            for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
+                dim = sq_ast_mod.ALL_DIMS[dim_index]
 
-                attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
-                    attention_flows[old_index, dim_index, :, :], 
-                    config_file["saliency"]["saliency_interp_method"]
-                )
-                attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
-                attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
-                attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
+                if sq_ast_pred[old_index, dim_index] <= config_file["score_threshold"]:
 
-                if config_file["pdsm"]["preprocess"] == "abs":
-                    pdsm_preprocess = np.abs
-                elif config_file["pdsm"]["preprocess"] == "thresh_abs":
-                    pdsm_preprocess = pdsm.thresh_abs
+                    attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
+                        attention_flows[old_index, dim_index, :, :], 
+                        config_file["saliency"]["saliency_interp_method"]
+                    )
+                    attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
+                    attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
+                    attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
 
-                if config_file["pdsm"]["pool"] == "mean":
-                    pdsm_pool = np.mean
-                elif config_file["pdsm"]["pool"] == "sum":
-                    pdsm_pool = np.sum
-                elif config_file["pdsm"]["pool"] == "l2_norm":
-                    pdsm_pool = pdsm.l2_norm
+                    if config_file["pdsm"]["preprocess"] == "abs":
+                        pdsm_preprocess = np.abs
+                    elif config_file["pdsm"]["preprocess"] == "thresh_abs":
+                        pdsm_preprocess = pdsm.thresh_abs
 
-                dim_pdsm, dim_phon = pdsm.PDSM(
-                    attn_rescaled, 
-                    ppgs_pred_file,
-                    ppgs_dict,
-                    pdsm_preprocess, 
-                    pdsm_pool, 
-                    config_file["pdsm"]["k_method"],
-                    config_file["pdsm"]["k"]
-                )
+                    if config_file["pdsm"]["pool"] == "mean":
+                        pdsm_pool = np.mean
+                    elif config_file["pdsm"]["pool"] == "sum":
+                        pdsm_pool = np.sum
+                    elif config_file["pdsm"]["pool"] == "l2_norm":
+                        pdsm_pool = pdsm.l2_norm
 
-                pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
-            
-                kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled)
-                kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
-                kde_y_info[file_idx, dim_index, :] = kde_y
+                    dim_pdsm, dim_phon = pdsm.PDSM(
+                        attn_rescaled, 
+                        ppgs_pred_file,
+                        ppgs_dict,
+                        pdsm_preprocess, 
+                        pdsm_pool, 
+                        config_file["pdsm"]["k_method"],
+                        config_file["pdsm"]["k"]
+                    )
 
-                # save the output images for scores that don't meet the threshold
-                if config_file["saliency"]["output_saliency_overlay"]:
+                    pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
                 
-                    _, mel_spec = sq_ast_ds.__getitem__(old_index)
+                    kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled, config_file["kde"]["bw_method"])
+                    kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
+                    kde_y_info[file_idx, dim_index, :] = kde_y
 
-                    plot_helper.plot_saliency_with_pdsm(
-                        old_index, mel_spec, dim_pdsm, fbank_lengths[old_index][1], 
-                        dim_phon, config_file, file_path, dim, sq_ast_pred[old_index, dim_index], 
-                        output_saliency_dir, attn_rescaled
-                    )
+                    # save the output images for scores that don't meet the threshold
+                    if (config_file["plots"]["output_pdsm_saliency_overlay"]) or (config_file["plots"]["output_joint_kde"]):
+                    
+                        _, mel_spec = sq_ast_ds.__getitem__(old_index)
 
-                    plot_helper.plot_saliency_jointgrid(
-                        config_file, attn_rescaled, mel_spec, 
-                        kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
-                        word_alignments[file_idx], old_index, file_path, dim, sq_ast_pred[old_index, dim_index], output_saliency_dir
-                    )
+                        if (config_file["plots"]["output_pdsm_saliency_overlay"]):
+                            plot_helper.plot_saliency_with_pdsm(
+                                old_index, mel_spec, dim_pdsm, fbank_lengths[old_index][1], 
+                                dim_phon, config_file, file_path, dim, sq_ast_pred[old_index, dim_index], 
+                                output_individual_dir, attn_rescaled
+                            )
 
-            else:
-                pdsm_info[f"pdsm_sq_{dim}"].append([]) # store dummy phoneme information
-        
-        plot_helper.plot_kde_along_waveform(
-            config_file, kde_x_info[file_idx, :, :fbank_lengths[old_index][1]], sq_ast_mod.ALL_DIMS, file_path, word_alignments[file_idx], 
-            sq_ast_pred[old_index, :], output_saliency_dir, old_index
-        )
+                        if (config_file["plots"]["output_joint_kde"]):
+                            plot_helper.plot_saliency_jointgrid(
+                                config_file, attn_rescaled, mel_spec, 
+                                kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
+                                word_alignments[file_idx], old_index, file_path, dim, sq_ast_pred[old_index, dim_index], output_individual_dir
+                            )
 
-    print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_current_time}")
+                else:
+                    pdsm_info[f"pdsm_sq_{dim}"].append([]) # store dummy phoneme information
+            
+            if (config_file["plots"]["output_time_kde"]):
+                plot_helper.plot_kde_along_waveform(
+                    config_file, kde_x_info[file_idx, :, :fbank_lengths[old_index][1]], sq_ast_mod.ALL_DIMS, file_path, word_alignments[file_idx], 
+                    sq_ast_pred[old_index, :], output_individual_dir, old_index
+                )
 
-    for dim in sq_ast_mod.ALL_DIMS:
-        output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
-        output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
+            if (config_file["plots"]["output_asr_confidence"]):
+                plot_helper.plot_asr_confidence_along_waveform(
+                    config_file, file_path, word_alignments[file_idx], output_individual_dir, old_index
+                )
 
-    output_ind_df.to_csv(output_ind_csv_path, index=False)
-    output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False)
+        if (config_file["plots"]["output_freq_kde"]):
+            plot_helper.plot_kde_for_freq_sys(
+                config_file, kde_y_info, sq_ast_mod.ALL_DIMS, output_sysfig_dir
+            )
 
-    for dim in sq_ast_mod.ALL_DIMS:
-        thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
-        single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
-        plot_helper.plot_phoneme_hists(
-            single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"]
-        )
+        print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_current_time}")
+
+        for dim in sq_ast_mod.ALL_DIMS:
+            output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
+            output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
+
+        output_ind_df.to_csv(output_ind_csv_path, index=False)
+        output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False)
+
+        for dim in sq_ast_mod.ALL_DIMS:
+            thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
+            single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
+            plot_helper.plot_phoneme_hists(
+                single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"], config_file["plots"]["output_phoneme_hist"], config_file["plots"]["output_double_phoneme_hist"]
+            )
+
+    with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
+        yaml.dump(config_file, outfile)
 
     print(f"Completed analysis in {str((datetime.now() - start_time))}")
 
