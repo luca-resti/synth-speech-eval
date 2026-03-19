@@ -63,6 +63,9 @@ def PDSM(saliency_map, ppg, ppg_dict, preprocess_fn, pool_fn, k_method, k):
     return m_out, phonemes_return
 
 
+COUNT_AS_DOUBLE_PAD = 5 # 50 ms
+
+
 def get_bulk_hists_for_system(df, dim):
 
     single_phoneme_hist = {}
@@ -80,7 +83,7 @@ def get_bulk_hists_for_system(df, dim):
 
             if index < len(phoneme_info) - 1:
                 next_phoneme = phoneme_info[index+1]
-                if phoneme[3] == next_phoneme[2] - 1:
+                if phoneme[3] == next_phoneme[2] - COUNT_AS_DOUBLE_PAD:
                     phoneme_transition = phoneme[1] + "-" + next_phoneme[1]
                     if phoneme_transition not in double_phoneme_hist.keys():
                         double_phoneme_hist[phoneme_transition] = 1

@@ -187,7 +187,7 @@ def plot_kde_along_waveform(
     ):
 
     fs_test, audio_test = io.wavfile.read(wav_path)
-    audio_test = (audio_test.astype(np.float32))/np.abs(np.max(audio_test))
+    audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
     for dim_index in range(len(all_dims)):
@@ -276,7 +276,7 @@ def plot_asr_confidence_along_waveform(
     ):
 
     fs_test, audio_test = io.wavfile.read(wav_path)
-    audio_test = (audio_test.astype(np.float32))/np.abs(np.max(audio_test))
+    audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
     confidence = np.zeros(shape=(len(audio_test)), dtype=np.float32)
@@ -303,17 +303,18 @@ def plot_asr_confidence_along_waveform(
             )
             last_end = word_segment["end"]*fs_test
 
-    axs[0].plot(confidence, label="ASR Confidence")
+    axs[0].plot(confidence)
     
     axs[0].set_xlim(0, len(audio_test))
     axs[0].set_xticks([0], [None])
     axs[0].axis("off")
-    axs[0].set_yticks([0], [None])
+    axs[0].set_yticks([0, 1.0], ["0%", "100%"])
+    axs[0].set_ylabel("ASR Word Confidence")
     axs[0].set_ylim(0, 1.05) # extra 5%
 
-    axs[0].legend(
-        bbox_to_anchor=[0.0, 0.0], loc='lower left', fontsize=9
-    )
+    # axs[0].legend(
+    #     bbox_to_anchor=[0.0, 0.0], loc='lower left', fontsize=9
+    # )
     
     axs[1].plot(audio_test)
 
