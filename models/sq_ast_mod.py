@@ -282,6 +282,7 @@ def get_pred_attn(dims, dl, device, bs, threshold_value):
                 model.eval()
 
                 for batch_index, (index, batch_features) in enumerate(dl):
+                    print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
                     batch_features = batch_features.float().to(device)
                     pred, attentions = model(batch_features, output_attentions=True)
                     attentions = attentions.cpu().detach()
@@ -296,6 +297,7 @@ def get_pred_attn(dims, dl, device, bs, threshold_value):
                             if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
                                 attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
                                 attention_flows[i, dim_index, :, :] = attention_flow.reshape(12, 101)
+                print("\n\r", end="")
 
     return predictions, attention_flows
 

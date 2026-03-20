@@ -1,3 +1,7 @@
+import matplotlib
+# stop runtime errors?
+matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 import os
 import numpy as np

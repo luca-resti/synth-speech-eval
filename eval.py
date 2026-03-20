@@ -68,10 +68,10 @@ def run_eval(config_file):
         sq_ast_pred = sq_ast_pred[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
         saliency_maps = saliency_maps[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :, :, :]
 
-        pdsm_start_time = datetime.now()
-
         # run through WhisperX model for ppg and aligned transcriptions
         ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
+
+        pdsm_start_time = datetime.now()
 
         # get pdsm dict for output dataframe
         pdsm_info = pdsm.PDSM_INFO
