@@ -6,14 +6,12 @@ import pandas as pd
 import torch
 import torchaudio
 import torch.nn.functional as F
-import argparse
 from torch.utils.data import Dataset, DataLoader
 from datetime import datetime
 from transformers import ASTConfig, ASTModel, ASTFeatureExtractor, logging as hf_logging
 import numpy as np
 
-#hf_logging.set_verbosity_error()  # Silence unnecessary warnings from huggingface
-
+hf_logging.set_verbosity_error()  # Silence unnecessary warnings from huggingface
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -21,6 +19,14 @@ ALL_DIMS = ["mos", "noi", "dis", "col", "loud"]
 COL_IDX = {d: i for i, d in enumerate(ALL_DIMS)}
 SALIENCY_INTERP_SIZE = (128, 1024)
 
+MAX_AUDIO_LEN = 10
+SQ_FRAME_SIZE = 0.025
+SQ_HOP_SIZE = 0.01
+SQ_MEL_FREQ = SALIENCY_INTERP_SIZE[0]
+
+# Values from SQ_AST code
+DB_MEAN = -10.25446422 # calculated from the validation datasets from July 2025
+DB_STD = 4.205750774 # calculated from the validation datasets from July 2025
 
 class ASTXL(torch.nn.Module):
     """Model-XL with individual AST for each dimension."""
@@ -99,15 +105,48 @@ class ASTVal(Dataset):
 
 
 def get_expected_fbank_shape(waveform, sample_rate):
-    num_mel_bins = 128
-    frame_length = int(sample_rate * 0.025)  # 25 ms
-    frame_step = int(sample_rate * 0.010)    # 10 ms
+    """
+    Returns expected shape of frequency bank mel_spectrogram
+
+    Parameters
+    ----------
+    waveform (np.array) : Raw audio file after reading
+    sample_rate (int) : Audio sample rate (should be 48k)
+    
+    Returns
+    ----------
+    dl (dataloader) : The dataloader needed by SQ_AST
+    ds (ASTVal) : The SQ_AST dataset to be used for later analysis and spectrogram access
+    fbank_lengths (np.array) : Lengths of spectrograms for each audio file in dataset
+    audio_files_txt (list) : List of strings to file paths
+    """
+
+    num_mel_bins = SALIENCY_INTERP_SIZE[0]
+    frame_length = int(sample_rate * SQ_FRAME_SIZE)  # 25 ms
+    frame_step = int(sample_rate * SQ_HOP_SIZE)    # 10 ms
     num_frames = int(np.floor((waveform.shape[1] - frame_length) / frame_step)) + 1
     return (num_mel_bins, num_frames)
 
 
-def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
+def prepare_dataloader(data_dir, wav_path, bs, num_workers):
+    """
+    Gathers the data in the input directory ready for the SQ_AST forward pass
+
+    Parameters
+    ----------
+    data_dir (os.path) : Dataset directory, if dataset is a directory, else None
+    wav_path (os.path) : Audio file path, if dataset is a single wav file, else None
+    bs (int) : SQ_AST batch size
+    num_workers (int) : SQ_AST num_workers arguement
     
+    Returns
+    ----------
+    dl (dataloader) : The dataloader needed by SQ_AST
+    ds (ASTVal) : The SQ_AST dataset to be used for later analysis and spectrogram access
+    fbank_lengths (np.array) : Lengths of spectrograms for each audio file in dataset
+    audio_files_txt (list) : List of strings to file paths
+    """
+
     fbank_lengths = []
     audio_files_txt = []
 
@@ -128,8 +167,8 @@ def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
         df['file_path'] = file_paths
         df['db'] = db_name # data_dir basename
         df['file_num'] = range(1, len(file_paths) + 1)
-        df['db_mean'] = db_mean
-        df['db_std'] = db_std
+        df['db_mean'] = DB_MEAN
+        df['db_std'] = DB_STD
    
         for data_index in range(len(file_paths)):
             data_file = file_paths[data_index]
@@ -137,7 +176,7 @@ def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
             audio_files_txt.append([data_index, os.path.join(data_dir, data_file)])
             fbank_lengths.append([data_index, get_expected_fbank_shape(audio, sample_rate)[1]])
    
-        ds = ASTVal(df, data_dir, db_mean, db_std)
+        ds = ASTVal(df, data_dir, DB_MEAN, DB_STD)
 
     else: # single file
         db_name = os.path.basename(str(wav_path).replace('.wav',''))
@@ -148,37 +187,55 @@ def prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers):
             'db': [db_name],
             'file_path': [os.path.basename(wav_path)],
             'file_num': [1],
-            'db_mean': [db_mean],
-            'db_std': [db_std]
+            'db_mean': [DB_MEAN],
+            'db_std': [DB_STD]
         })
 
-        audio, sample_rate = torchaudio.load(os.path.basename(wav_path))
-        audio_files_txt.append([0, os.path.basename(wav_path)])
+        audio, sample_rate = torchaudio.load(wav_path)
+        audio_files_txt.append([0, wav_path])
         fbank_lengths.append([0, get_expected_fbank_shape(audio, sample_rate)[1]])
 
-        ds = ASTVal(df, os.path.dirname(wav_path), db_mean, db_std)
+        ds = ASTVal(df, os.path.dirname(wav_path), DB_MEAN, DB_STD)
 
     print(f"Running SQ_AST Inference on {len(audio_files_txt)} audio files.")
 
-    dl = DataLoader(
-        dataset=ds,
-        batch_size=bs,
-        shuffle=False,
-        num_workers=num_workers
-    )
+    dl = DataLoader(dataset=ds, batch_size=bs, shuffle=False, num_workers=num_workers)
+    fbank_lengths = np.array(fbank_lengths)
 
     return dl, ds, fbank_lengths, audio_files_txt
 
 
 def get_scaled_saliency_map(attn_map, saliency_interp_method):
+    """
+    Interpolates and scales the input saliency map to the size of the input spectrogram of SQ_AST
+
+    Parameters
+    ----------
+    attn_map (np.array) : Input saliency map to interpolate up to size
+    saliency_interp_method (str) : extracted attention for each layer
+    
+    Returns
+    ----------
+    scaled_attn_map (np.array) : Interpolated saliency map to fit size of the input spectrogram to SQ_AST
+
+    """
     attn_map = torch.tensor(attn_map).unsqueeze(0).unsqueeze(0)
-    return F.interpolate(attn_map, size=SALIENCY_INTERP_SIZE, mode=saliency_interp_method)
+    scaled_attn_map = F.interpolate(attn_map, size=SALIENCY_INTERP_SIZE, mode=saliency_interp_method)
+    return scaled_attn_map
     
 
 def tensor_attention_flow(attn_maps):
     """
-    Approximates Attention Flow using tensor operations.
-    attn_maps: [layers, seq_len, seq_len]
+    Approximates attention flow (using only CLS on each layer for efficiency)
+
+    Parameters
+    ----------
+    attn_maps (np.array) : extracted attention for each layer
+    
+    Returns
+    ----------
+    cls_flow (torch.Tensor) : Flattened tensor for attention flow on CLS (removed <CLS> and <DISTILL> tokens)
+
     """
     num_layers, seq_len, _ = attn_maps.shape
 
@@ -193,6 +250,23 @@ def tensor_attention_flow(attn_maps):
 
 
 def get_pred_attn(dims, dl, device, bs, threshold_value):
+    """
+    Evaluates the SQ_AST outputs for given input and dimensions, and returns the attention flow
+
+    Parameters
+    ----------
+    dims (list) : Dimensions to run in SQ_AST
+    dl (dataloader) : Dataloader for the ASTVal input dataset
+    device (str) : "cpu"/"cuda"
+    bs (int) : Batch size to run on SQ_AST
+    threshold_value (float) : User defined threshold to filter predictions below
+    
+    Returns
+    ----------
+    predictions (numpy.array) : SQ_AST prediction outputs shape (files, dimensions)
+    attention_flows (numpy.array) : SQ_AST extracted attention flow (files, dimensions, transformer layers, input tokens)
+
+    """
     
     attention_flows = torch.Tensor(np.zeros(shape=(dl.__len__()*bs, len(dims), 12, 101)))
     predictions = torch.Tensor(np.zeros(shape=(dl.__len__()*bs, len(dims))))
@@ -227,9 +301,23 @@ def get_pred_attn(dims, dl, device, bs, threshold_value):
 
 
 def sq_ast_fw(config_file):
+    """
+    Completes the SQ_AST forward pass for whole dataset and gathers saliency map below threshold defined in config_file
+
+    Parameters
+    ----------
+    config_file (dict) :  Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+
+    Returns
+    ----------
+    ds (ASTVal) : this is the dataset that contains the preprocessing steps for SQ_AST
+    predictions (np.array) : SQ_AST output predictions in the shape (files, dimension)
+    saliency_map (np.array) : SQ_AST saliency output in the shape (files, dimensions, transformer layers, input tokens)
+    fbank_lengths (np.array) : Time-dimension lengths of the input spectrograms (used in later plots)
+    output_ind_df (pandas.dataframe) : Output dataframe for predictions
+    """
 
     current_time = datetime.now()
-    output_dir = config_file["output_dir"]
     dims = ALL_DIMS
     bs = int(config_file["sq_ast"]["batch_size"])
     num_workers = int(0)
@@ -241,11 +329,8 @@ def sq_ast_fw(config_file):
         wav_path = input_dir
         data_dir = None
     else: 
-        data_dir = input_dir + "/"
         wav_path = None
-
-    db_mean = -10.25446422 # calculated from the validation datasets from July 2025
-    db_std = 4.205750774 # calculated from the validation datasets from July 2025
+        data_dir = input_dir + "/"
     
     # get device from config and check if GPU is available
     if config_file["device"] == "gpu" and torch.cuda.is_available():
@@ -255,19 +340,62 @@ def sq_ast_fw(config_file):
 
     print(f"Starting SQ_AST Preprocessing")
 
+    if wav_path is not None:
+        bs = 1
+
     # create dataset for sq_ast
-    dl, ds, fbank_lengths, audio_files_txt = prepare_dataloader(data_dir, wav_path, db_mean, db_std, bs, num_workers)
+    dl, ds, fbank_lengths, audio_files_txt = prepare_dataloader(data_dir, wav_path, bs, num_workers)
 
     # get the predictions and attention flows for each dimension
-    predictions, attention_flows = get_pred_attn(dims, dl, device, bs, config_file["score_threshold"])
+    predictions, saliency_map = get_pred_attn(dims, dl, device, bs, config_file["score_threshold"])
 
     print(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
 
+    # develop dataframe
+    output_ind_df = pd.DataFrame(columns=["file_path", "sq_mos", "sq_noi", "sq_dis", "sq_col", "sq_loud"])
+    for i, (_, file_path) in enumerate(audio_files_txt):
+        output_ind_df.loc[i] = {
+            "index": i,
+            "file_path": file_path,
+            "sq_mos": predictions.cpu().numpy()[i, 0],
+            "sq_noi": predictions.cpu().numpy()[i, 1],
+            "sq_dis": predictions.cpu().numpy()[i, 2],
+            "sq_col": predictions.cpu().numpy()[i, 3],
+            "sq_loud": predictions.cpu().numpy()[i, 4]
+        }
+
+    predictions = predictions.cpu().numpy()
+    saliency_map = saliency_map.cpu().numpy()
+
     return (
-        ds,
-        predictions.cpu().numpy(), 
-        attention_flows.cpu().numpy(), 
-        fbank_lengths, 
-        audio_files_txt
+        ds, predictions, saliency_map, fbank_lengths, output_ind_df
     )
+
+
+def get_thresholded_df(input_df, score_threshold):
+    """
+    Gets the filtered Dataframe with a given score threshold
+    Returns the dataframe with all data lying below this threshold
+
+    Parameters
+    ----------
+    input_df (pandas.dataframe) : Dataframe of SQ_AST outputs
+    score_threshold (float) : User defined threshold to get all below
+    
+    Returns
+    ----------
+    output_df_thresh (pandas.dataframe) : Thresholded dataframe
+
+    """
+    # get thresholded dataframe under the score threshold
+    output_df_thresh = input_df[
+        (input_df["sq_mos"] <= score_threshold) |
+        (input_df["sq_noi"] <= score_threshold) |
+        (input_df["sq_dis"] <= score_threshold) |
+        (input_df["sq_col"] <= score_threshold) |
+        (input_df["sq_loud"] <= score_threshold)
+    ]
+    output_df_thresh["index"] = np.arange(len(output_df_thresh))
+    output_df_thresh = output_df_thresh.reset_index(names=["pre_threshold_index"])
+    return output_df_thresh
 

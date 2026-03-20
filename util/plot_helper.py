@@ -7,9 +7,30 @@ from scipy import io
 MAX_PHONEME_PLOT = 10
 
 def plot_phoneme_hists(
-        single_hist, double_hist, dataset_name, output_sysfig_dir, dim, thresh_val,
-        output_phoneme_hist, output_double_phoneme_hist
+        config_file, dim,
+        single_hist, double_hist, 
+        output_dir
     ):
+    '''
+    Plots histograms of the occurance of each phoneme (and phoneme pairs) deemed important on a system level
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    dim (str) : Dimension to show saliency for
+    single_phoneme_hist (dict) : Histogram data for single phonemes (None if empty)
+    double_phoneme_hist (dict) : Histogram data for phonemes-pairs (None if empty)
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+
+    thresh_val = config_file["score_threshold"]
+    output_phoneme_hist = config_file["plots"]["output_phoneme_hist"]
+    output_double_phoneme_hist = config_file["plots"]["output_double_phoneme_hist"]
+    dataset_name = config_file["dataset_name"]
 
     if (single_hist is not None) and (output_phoneme_hist):
         plt.figure(figsize=(15, 5))
@@ -21,7 +42,7 @@ def plot_phoneme_hists(
             plt.bar(list(single_hist.keys()), list(single_hist.values()), color='skyblue')
             plt.title(f'{dataset_name}: Proportions of {single_hist_len} most Important Phonemes at Threshold Value {thresh_val} for {dim}')
         plt.ylabel('Proportion of Important Phonemes')
-        plt.savefig(os.path.join(output_sysfig_dir, f"sys_single_hist_{dim}.png"))
+        plt.savefig(os.path.join(output_dir, f"sys_single_hist_{dim}.png"))
         plt.clf()
         plt.close()
 
@@ -35,21 +56,45 @@ def plot_phoneme_hists(
             plt.bar(list(double_hist.keys()), list(double_hist.values()), color='skyblue')
             plt.title(f'{dataset_name}: Proportions of {double_hist_len} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {dim}')
         plt.ylabel('Proportion of Important Phonemes')
-        plt.savefig(os.path.join(output_sysfig_dir, f"sys_double_hist_{dim}.png"))
+        plt.savefig(os.path.join(output_dir, f"sys_double_hist_{dim}.png"))
         plt.clf()
         plt.close()
 
     return 0
 
 def plot_saliency_with_pdsm(
-        file_idx, mel_spec, dim_pdsm, fbank_length, 
-        dim_phon, config_file, file_path, dim, sq_ast_pred_i, 
-        output_saliency_dir, attn_rescaled
+        config_file, file_idx, file_path,
+        spectrogram, saliency_map, fbank_length, 
+        dim, dim_phon, dim_pdsm, sq_ast_pred_i, 
+        output_dir
     ):
+    '''
+    Plots a figure of the Spectrogram with most important phonemes highlighted
+    Underneath a Saliency Map is plotted to validate phonemes selected
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    file_idx (int) : Original dataset index for audio file 
+    file_path (os.path) : Path to the audio file
+    spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
+    saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
+    fbank_length (int) : Time dimension of spectrogram (as max is parsed into spectrogram arg)
+    dim (str) : Dimension to show saliency for
+    dim_phon (list) : List of important phonemes including their start and end times
+    dim_pdsm (np.array) : Mask of important phonemes
+    result_word_alignment (list) : ASR word alignment for the given audio file
+    sq_ast_pred_i (float) : The output of SQ_AST for a given dimension
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
 
     plt.figure(figsize=(15, 10))
     plt.subplot(2, 1, 1)
-    plt.imshow(mel_spec.T, aspect='auto', origin='lower', cmap='gray')
+    plt.imshow(spectrogram.T, aspect='auto', origin='lower', cmap='gray')
     plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
     plt.xlim(0, fbank_length)
     plt.ylim(0, 128)
@@ -64,7 +109,7 @@ def plot_saliency_with_pdsm(
     plt.ylabel("Mel Frequency Bin")
 
     plt.subplot(2, 1, 2)
-    plt.imshow(attn_rescaled, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
+    plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
     plt.xlim(0, fbank_length)
     plt.ylim(0, 128)
     plt.title(f"Attention Rollout for {dim}")
@@ -76,39 +121,7 @@ def plot_saliency_with_pdsm(
     elif config_file["pdsm"]["k_method"] == "percent":
         plt.suptitle(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
 
-    plt.savefig(os.path.join(output_saliency_dir, f"Phoneme_{file_idx}_{dim}.png"))
-    plt.clf()
-    plt.close()
-
-    return 0
-
-
-def plot_sys_violin_plot(config_file, dims, output_ind_df, output_sysfig_dir):
-
-    plt.figure(figsize=(8, 8))
-
-    plot_data = [output_ind_df[f"sq_{dim}"] for dim in dims]
-
-    parts = plt.violinplot(plot_data, positions=range(len(dims)), 
-                        showmeans=True, showmedians=False, showextrema=True)
-
-    for pc in parts['bodies']:
-        pc.set_facecolor('blue')
-        pc.set_edgecolor('black')
-        pc.set_alpha(0.3)
-
-    plt.axhline(y=config_file["score_threshold"], color="red", 
-                linestyle="--", alpha=0.5, label="Threshold")
-    
-    plt.xticks(range(len(dims)), labels=dims)
-    plt.xlabel("Sound Quality Output Categories")
-    plt.ylabel("Score (1-5)")
-    plt.xlim(-0.5, len(dims) - 0.5)
-    plt.ylim(0, 5.5)
-    plt.title(f"Violin Plot for SQ_AST Outputs Categories Over {config_file['dataset_name']} Dataset")
-    plt.legend()
-
-    plt.savefig(os.path.join(output_sysfig_dir, "sq_ast_violin.png"))
+    plt.savefig(os.path.join(output_dir, f"Phoneme_{file_idx}_{dim}.png"))
     plt.clf()
     plt.close()
 
@@ -116,9 +129,32 @@ def plot_sys_violin_plot(config_file, dims, output_ind_df, output_sysfig_dir):
 
 
 def plot_saliency_jointgrid(
-        config_file, saliency_map, spectrogram, kde_x_est, kde_y_est, result_word_alignment, 
-        file_idx, file_path, dim, sq_ast_pred_i, output_saliency_dir
+        config_file, file_idx, file_path, 
+        spectrogram, saliency_map, kde_x_est, kde_y_est, 
+        dim, result_word_alignment, sq_ast_pred_i, 
+        output_dir
     ):
+    '''
+    Plots a figure of the Spectrogram with a Saliency overlay and KDE along each axis for a singular audio file
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    file_idx (int) : Original dataset index for audio file 
+    file_path (os.path) : Path to the audio file
+    spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
+    saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
+    kde_x_est (np.array) : KDE for the time dimension
+    kde_y_est (np.array) : KDE for the frequency dimension
+    dim (str) : Dimension to show saliency for
+    result_word_alignment (list) : ASR word alignment for the given audio file
+    sq_ast_pred_i (float) : The output of SQ_AST for a given dimension
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
 
     h, w = saliency_map.shape
     x_flat = np.arange(w)
@@ -175,16 +211,84 @@ def plot_saliency_jointgrid(
             fontsize=16, y=1.03
         )
 
-    plt.savefig(os.path.join(output_saliency_dir, f"KDE_Word_{file_idx}_{dim}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"KDE_Word_{file_idx}_{dim}.png"), bbox_inches='tight')
+    plt.close()
+
+    return 0
+
+
+def plot_sys_violin_plot(
+        config_file, output_df, all_dims, output_dir
+    ):
+    '''
+    Plots a figure of the distribution of the whole dataset along all SQ_AST dimensions (with threshold)
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    output_df (pandas.dataframe) : dataset containing the output scores from SQ_AST across all dimensions
+    all_dims (list) : SQ_AST dimensions to run
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+
+    plt.figure(figsize=(8, 8))
+
+    plot_data = [output_df[f"sq_{dim}"] for dim in all_dims]
+
+    parts = plt.violinplot(plot_data, positions=range(len(all_dims)), 
+                        showmeans=True, showmedians=False, showextrema=True)
+
+    for pc in parts['bodies']:
+        pc.set_facecolor('blue')
+        pc.set_edgecolor('black')
+        pc.set_alpha(0.3)
+
+    plt.axhline(y=config_file["score_threshold"], color="red", 
+                linestyle="--", alpha=0.5, label="Threshold")
+    
+    plt.xticks(range(len(all_dims)), labels=all_dims)
+    plt.xlabel("Sound Quality Output Categories")
+    plt.ylabel("Score (1-5)")
+    plt.xlim(-0.5, len(all_dims) - 0.5)
+    plt.ylim(0, 5.5)
+    plt.title(f"Violin Plot for SQ_AST Outputs Categories Over {config_file['dataset_name']} Dataset")
+    plt.legend()
+
+    plt.savefig(os.path.join(output_dir, "sq_ast_violin.png"))
+    plt.clf()
     plt.close()
 
     return 0
 
 
 def plot_kde_along_waveform(
-        config_file, time_kdes, all_dims, wav_path, result_word_alignment, 
-        sq_ast_scores, output_saliency_dir, file_idx
+        config_file, file_idx, wav_path,
+        time_kdes, result_word_alignment, 
+        all_dims, sq_ast_scores,
+        output_dir, 
     ):
+    '''
+    Plots a figure of ASR Word Confidence over a single audio file
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    file_idx (int) : Original dataset index of the wav file
+    wav_path (os.path) : Path to the wav file
+    time_kdes (numpy.array) : Kernel density estimation over time for a single audio file
+    result_word_alignment (list) : ASR word alignment for the given audio file
+    all_dims (list) : SQ_AST dimensions to run
+    sq_ast_scores (numpy.array) : Scores for SQ_AST output across all dimensions for audio file
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
 
     fs_test, audio_test = io.wavfile.read(wav_path)
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
@@ -265,15 +369,31 @@ def plot_kde_along_waveform(
 
     plt.suptitle(f"File: {wav_path}, Importance over Time For Sound Quality Metrics")
 
-    plt.savefig(os.path.join(output_saliency_dir, f"KDE_Time_Word_{file_idx}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"KDE_Time_Word_{file_idx}.png"), bbox_inches='tight')
     plt.close()
 
     return 0
 
 
 def plot_asr_confidence_along_waveform(
-        config_file,  wav_path, result_word_alignment, output_saliency_dir, file_idx
+        config_file, wav_path, file_idx,
+        result_word_alignment, output_dir
     ):
+    '''
+    Plots a figure of ASR Word Confidence over a single audio file
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    wav_path (os.path) : Path to the wav file
+    file_idx (int) : Original dataset index of the wav file
+    result_word_alignment (list) : ASR word alignment for the given audio file
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
 
     fs_test, audio_test = io.wavfile.read(wav_path)
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
@@ -285,9 +405,7 @@ def plot_asr_confidence_along_waveform(
     for word_segment in result_word_alignment:
 
         if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
-
             confidence[int(word_segment["start"]*fs_test):int(word_segment["end"]*fs_test)] = np.float32(word_segment["score"])
-
             if word_segment["start"]*fs_test != last_end:
                 axs[0].plot(
                     [word_segment["start"]*fs_test, word_segment["start"]*fs_test], 
@@ -311,10 +429,6 @@ def plot_asr_confidence_along_waveform(
     axs[0].set_yticks([0, 1.0], ["0%", "100%"])
     axs[0].set_ylabel("ASR Word Confidence")
     axs[0].set_ylim(0, 1.05) # extra 5%
-
-    # axs[0].legend(
-    #     bbox_to_anchor=[0.0, 0.0], loc='lower left', fontsize=9
-    # )
     
     axs[1].plot(audio_test)
 
@@ -350,17 +464,32 @@ def plot_asr_confidence_along_waveform(
     axs[1].set_ylabel("Amplitude")
     axs[1].set_yticks([0], [None])
 
-    plt.suptitle(f"File: {wav_path}, ASR Confidence For Each Word")
+    plt.suptitle(f"{config_file["dataset_name"]}, File: {wav_path}, ASR Confidence For Each Word")
 
-    plt.savefig(os.path.join(output_saliency_dir, f"ASR_Confidence_{file_idx}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"ASR_Confidence_{file_idx}.png"), bbox_inches='tight')
     plt.close()
 
     return 0
 
 
 def plot_kde_for_freq_sys(
-        config_file, kde_freq, all_dims, output_sysfig_dir
-):
+        config_file, kde_freq, all_dims, 
+        output_dir
+    ):
+    '''
+    Plots a figure of Frequency Kernel Density Estimation over the entire system under threshold
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    kde_freq (numpy.array) : Kernel Density Estimation for mel-frequency bins across all dimensions
+    all_dims (list) : SQ_AST dimensions to run
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
     
     if np.any(kde_freq):
         plt.figure(figsize=(10, 5))
@@ -377,7 +506,7 @@ def plot_kde_for_freq_sys(
         plt.xlim(0, 128)
         plt.ylim(0, max_val*1.05)
         plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System")
-        plt.savefig(os.path.join(output_sysfig_dir, f"Frequency_KDE_For_Dims.png"))
+        plt.savefig(os.path.join(output_dir, f"Frequency_KDE_For_Dims.png"))
 
     return 0
 

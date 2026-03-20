@@ -1,7 +1,7 @@
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
-from util import plot_helper, kde_tools
+from util import plot_helper, kde_tools, config_util
 
 import sys
 import os
@@ -13,110 +13,100 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-if __name__ == "__main__":
+def run_eval(config_file):
+    '''
+    Aims to give an interpretable understanding of subjective speech quality metrics
+    Use SQ_AST model as a backbone, and combines this with the interperetability of WhisperX
+    Outputs uttererance and system-level reports for the most "troublesome" utterances below user defined threshold
 
-    if len(sys.argv) > 1:
-        config_path = "configs/" + sys.argv[1] + ".yaml"
-    else:
-        config_path = "configs/default.yaml"
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
 
-    with open(config_path, 'r') as f:
-        config_file = yaml.safe_load(f)
-
+    Returns
+    ----------
+    0 : 
+    '''
     start_time = datetime.now()
 
-    output_dir = config_file["output_dir"] + "/" + config_file["dataset_name"] + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
+    # create output directories
+    output_dir = ""
+    if str(config_file["dataset_name"]).endswith(".wav"): 
+        dataset_name = os.path.basename(str(config_file["dataset_name"]).replace('.wav',''))
+        output_dir = config_file["output_dir"] + "/" + dataset_name + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
+    else:
+       output_dir = config_file["output_dir"] + "/" + config_file["dataset_name"] + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
-    output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
-
-    output_ind_df = pd.DataFrame(columns=["file_path", "sq_mos", "sq_noi", "sq_dis", "sq_col", "sq_loud"])
-
-    sq_ast_ds, sq_ast_pred, attention_flows, fbank_lengths, audio_files_txt = sq_ast_mod.sq_ast_fw(config_file)
-
-    for i, (file_idx, file_path) in enumerate(audio_files_txt):
-        output_ind_df.loc[i] = {
-            "index": i,
-            "file_path": file_path,
-            "sq_mos": sq_ast_pred[i, 0],
-            "sq_noi": sq_ast_pred[i, 1],
-            "sq_dis": sq_ast_pred[i, 2],
-            "sq_col": sq_ast_pred[i, 3],
-            "sq_loud": sq_ast_pred[i, 4]
-        }
-
     output_sysfig_dir = output_dir + "/sys_analysis/"
     if not os.path.exists(output_sysfig_dir):
         os.makedirs(output_sysfig_dir)
+    output_individual_dir = output_dir + "/" + "individual_plots" + "/"
+    if not os.path.exists(output_individual_dir):
+        os.makedirs(output_individual_dir)
+    output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
+    output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
 
+    # unpack sq_ast outputs
+    sq_ast_ds, sq_ast_pred, saliency_maps, fbank_lengths, output_ind_df = sq_ast_mod.sq_ast_fw(config_file)
+
+    # plot system violin plots
     if config_file["plots"]["output_sys_violin"]:
-        plot_helper.plot_sys_violin_plot(config_file, sq_ast_mod.ALL_DIMS, output_ind_df, output_sysfig_dir)
+        plot_helper.plot_sys_violin_plot(
+            config_file, output_ind_df, sq_ast_mod.ALL_DIMS, 
+            output_sysfig_dir
+        )
 
-    output_ind_df_thresh = output_ind_df[
-        (output_ind_df["sq_mos"] <= config_file["score_threshold"]) |
-        (output_ind_df["sq_noi"] <= config_file["score_threshold"]) |
-        (output_ind_df["sq_dis"] <= config_file["score_threshold"]) |
-        (output_ind_df["sq_col"] <= config_file["score_threshold"]) |
-        (output_ind_df["sq_loud"] <= config_file["score_threshold"])
-    ]
-    output_ind_df_thresh["index"] = np.arange(len(output_ind_df_thresh))
-    output_ind_df_thresh = output_ind_df_thresh.reset_index(names=["pre_threshold_index"])
+    # threshold dataframe
+    output_ind_df_thresh = sq_ast_mod.get_thresholded_df(output_ind_df, config_file["score_threshold"])
 
+    # only run analysis if the thresholded dataframe is non empty
     if len(output_ind_df_thresh) > 0:
 
+        # remove saliency, fbank lengths and sq_ast_pred rows not in thresholded dataframe
+        fbank_lengths = fbank_lengths[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
+        sq_ast_pred = sq_ast_pred[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
+        saliency_maps = saliency_maps[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :, :, :]
+
+        pdsm_start_time = datetime.now()
+
+        # run through WhisperX model for ppg and aligned transcriptions
         ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
 
-        pdsm_info = {
-            "pdsm_sq_mos":[],
-            "pdsm_sq_noi":[],
-            "pdsm_sq_dis":[],
-            "pdsm_sq_col":[],
-            "pdsm_sq_loud":[],
-        }
+        # get pdsm dict for output dataframe
+        pdsm_info = pdsm.PDSM_INFO
 
-        output_individual_dir = output_dir + "/" + "individual_plots" + "/"
-        if not os.path.exists(output_individual_dir):
-            os.makedirs(output_individual_dir)
+        # get kernel density estimate for both time and frequency domain
+        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(sq_ast_mod.MAX_AUDIO_LEN/sq_ast_mod.SQ_HOP_SIZE)), dtype=np.float32)
+        kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), sq_ast_mod.SQ_MEL_FREQ), dtype=np.float32)
 
-        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(10/0.01)), dtype=np.float32)
-        kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), 128), dtype=np.float32)
-
-        pdsm_current_time = datetime.now()
-
+        # gather information on each thresholded audio file
         for file_idx, df_row in output_ind_df_thresh.iterrows():
             file_path = df_row["file_path"]
-            old_index = df_row["pre_threshold_index"]
+            pre_thresh_index = df_row["pre_threshold_index"]
 
-            ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[old_index][1]]
+            ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[file_idx][1]]
 
             for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
                 dim = sq_ast_mod.ALL_DIMS[dim_index]
 
-                if sq_ast_pred[old_index, dim_index] <= config_file["score_threshold"]:
+                if sq_ast_pred[file_idx, dim_index] <= config_file["score_threshold"]:
 
-                    attn_rescaled = sq_ast_mod.get_scaled_saliency_map(
-                        attention_flows[old_index, dim_index, :, :], 
+                    # get saliency maps interpolated up to size
+                    saliency_rescaled = sq_ast_mod.get_scaled_saliency_map(
+                        saliency_maps[file_idx, dim_index, :, :], 
                         config_file["saliency"]["saliency_interp_method"]
                     )
-                    attn_rescaled = attn_rescaled.squeeze().squeeze().detach().numpy()
-                    attn_rescaled = attn_rescaled[:, :fbank_lengths[old_index][1]]
-                    attn_rescaled = (attn_rescaled - attn_rescaled.min()) / (attn_rescaled.max() - attn_rescaled.min() + 1e-8)
+                    saliency_rescaled = saliency_rescaled.squeeze().squeeze().detach().numpy()
+                    saliency_rescaled = saliency_rescaled[:, :fbank_lengths[file_idx][1]]
+                    saliency_rescaled = (saliency_rescaled - saliency_rescaled.min()) / (saliency_rescaled.max() - saliency_rescaled.min() + 1e-8)
 
-                    if config_file["pdsm"]["preprocess"] == "abs":
-                        pdsm_preprocess = np.abs
-                    elif config_file["pdsm"]["preprocess"] == "thresh_abs":
-                        pdsm_preprocess = pdsm.thresh_abs
+                    # get the preprocess and pooling functions denoted in config file
+                    pdsm_preprocess, pdsm_pool = pdsm.get_preprocess_and_pool(config_file)
 
-                    if config_file["pdsm"]["pool"] == "mean":
-                        pdsm_pool = np.mean
-                    elif config_file["pdsm"]["pool"] == "sum":
-                        pdsm_pool = np.sum
-                    elif config_file["pdsm"]["pool"] == "l2_norm":
-                        pdsm_pool = pdsm.l2_norm
-
+                    # run the pdsm algorithm
                     dim_pdsm, dim_phon = pdsm.PDSM(
-                        attn_rescaled, 
+                        saliency_rescaled, 
                         ppgs_pred_file,
                         ppgs_dict,
                         pdsm_preprocess, 
@@ -125,68 +115,112 @@ if __name__ == "__main__":
                         config_file["pdsm"]["k"]
                     )
 
+                    # save the important phoneme information
                     pdsm_info[f"pdsm_sq_{dim}"].append(dim_phon) # store the phoneme information
                 
-                    kde_x, kde_y = kde_tools.get_kde_from_saliency(attn_rescaled, config_file["kde"]["bw_method"])
+                    # get the saliency kde for time and frequency dimensions
+                    kde_x, kde_y = kde_tools.get_kde_from_saliency(saliency_rescaled, config_file["kde"]["bw_method"])
                     kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
                     kde_y_info[file_idx, dim_index, :] = kde_y
 
                     # save the output images for scores that don't meet the threshold
                     if (config_file["plots"]["output_pdsm_saliency_overlay"]) or (config_file["plots"]["output_joint_kde"]):
-                    
-                        _, mel_spec = sq_ast_ds.__getitem__(old_index)
 
+                        # get spectrogram from original sq_ast dataset
+                        _, mel_spec = sq_ast_ds.__getitem__(pre_thresh_index)
+
+                        # save pdsm overlay
                         if (config_file["plots"]["output_pdsm_saliency_overlay"]):
                             plot_helper.plot_saliency_with_pdsm(
-                                old_index, mel_spec, dim_pdsm, fbank_lengths[old_index][1], 
-                                dim_phon, config_file, file_path, dim, sq_ast_pred[old_index, dim_index], 
-                                output_individual_dir, attn_rescaled
+                                config_file, pre_thresh_index, file_path,
+                                mel_spec, saliency_rescaled, fbank_lengths[file_idx][1], 
+                                dim, dim_phon, dim_pdsm, sq_ast_pred[file_idx, dim_index], 
+                                output_individual_dir
                             )
 
+                        # save kde overlay with saliency and spectrogram
                         if (config_file["plots"]["output_joint_kde"]):
                             plot_helper.plot_saliency_jointgrid(
-                                config_file, attn_rescaled, mel_spec, 
-                                kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
-                                word_alignments[file_idx], old_index, file_path, dim, sq_ast_pred[old_index, dim_index], output_individual_dir
+                                config_file, pre_thresh_index, file_path,
+                                mel_spec, saliency_rescaled, kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
+                                dim, word_alignments[file_idx], sq_ast_pred[file_idx, dim_index], 
+                                output_individual_dir
                             )
 
                 else:
-                    pdsm_info[f"pdsm_sq_{dim}"].append([]) # store dummy phoneme information
+                    # store dummy phoneme information to save lengths
+                    pdsm_info[f"pdsm_sq_{dim}"].append([]) 
             
+            # save kde over time
             if (config_file["plots"]["output_time_kde"]):
                 plot_helper.plot_kde_along_waveform(
-                    config_file, kde_x_info[file_idx, :, :fbank_lengths[old_index][1]], sq_ast_mod.ALL_DIMS, file_path, word_alignments[file_idx], 
-                    sq_ast_pred[old_index, :], output_individual_dir, old_index
+                    config_file, pre_thresh_index, file_path,
+                    kde_x_info[file_idx, :, :fbank_lengths[file_idx][1]], word_alignments[file_idx], 
+                    sq_ast_mod.ALL_DIMS, sq_ast_pred[file_idx, :],
+                    output_individual_dir, 
                 )
 
+            # save asr confidence for each word in transcription
             if (config_file["plots"]["output_asr_confidence"]):
                 plot_helper.plot_asr_confidence_along_waveform(
-                    config_file, file_path, word_alignments[file_idx], output_individual_dir, old_index
+                    config_file, file_path, pre_thresh_index,
+                    word_alignments[file_idx], output_individual_dir
                 )
 
+        # save system level frequency kde
         if (config_file["plots"]["output_freq_kde"]):
             plot_helper.plot_kde_for_freq_sys(
-                config_file, kde_y_info, sq_ast_mod.ALL_DIMS, output_sysfig_dir
+                config_file, kde_y_info, sq_ast_mod.ALL_DIMS,
+                output_sysfig_dir
             )
 
-        print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_current_time}")
+        print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_start_time}")
 
         for dim in sq_ast_mod.ALL_DIMS:
+
+            # Save most important phonemes
             output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
             output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
 
-        output_ind_df.to_csv(output_ind_csv_path, index=False)
-        output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False)
+            if (config_file["plots"]["output_phoneme_hist"]) or (config_file["plots"]["output_double_phoneme_hist"]):
+                # get threshold for current dimension
+                thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
 
-        for dim in sq_ast_mod.ALL_DIMS:
-            thresholded_df = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
-            single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
-            plot_helper.plot_phoneme_hists(
-                single_hist, double_hist, config_file["dataset_name"], output_sysfig_dir, dim, config_file["score_threshold"], config_file["plots"]["output_phoneme_hist"], config_file["plots"]["output_double_phoneme_hist"]
-            )
+                # retrieve histograms on single and double phonemes
+                single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
+                plot_helper.plot_phoneme_hists(
+                    config_file, dim,
+                    single_hist, double_hist, 
+                    output_sysfig_dir
+                )
+    
+        output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False, sep="\t")
+
+    output_ind_df.to_csv(output_ind_csv_path, index=False, sep="\t")
 
     with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
         yaml.dump(config_file, outfile)
 
     print(f"Completed analysis in {str((datetime.now() - start_time))}")
 
+    return 0
+
+
+if __name__ == "__main__":
+    
+    # Overwrite settings from default if given
+    config_file = {}
+
+    config_path = "configs/default.yaml"
+    with open(config_path, 'r') as f:
+        config_file = yaml.safe_load(f)
+
+    # load config file and overwrite any settings given
+    if len(sys.argv) > 1:
+        config_file_alt = {}
+        config_path_alt = "configs/" + sys.argv[1] + ".yaml"
+        with open(config_path_alt, 'r') as f:
+            config_file_alt = yaml.safe_load(f)
+        config_file = config_util.deep_merge(config_file, config_file_alt)
+
+    run_eval(config_file)

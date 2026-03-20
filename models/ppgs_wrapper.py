@@ -4,20 +4,36 @@ from phonemizer import phonemize
 import numpy as np
 import os
 from datetime import datetime
+from models import sq_ast_mod
 
-
+# Set for espeak requirement (default location)
 os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
 
 PAD_IN_SECONDS = 1.0
-TOTAL_AUDIO_LENGTH = 10
+TOTAL_AUDIO_LENGTH = sq_ast_mod.MAX_AUDIO_LEN
 WHISPERX_FS = 16000
-DESIRED_FRAME_DURATION = 0.01 # 10ms to match input mel spectrogram
+DESIRED_FRAME_DURATION = sq_ast_mod.SQ_HOP_SIZE # 10ms to match input mel spectrogram
 
-def whisperx_get_ppgs(output_ind_df, config_file): # (audio_file, device)
+
+def whisperx_get_ppgs(input_df, config_file):
+    '''
+    Runs all files in input_df through WhisperX, to phoneme and word alignment
+
+    Parameters
+    ----------
+    input_df (pandas.dataframe) : 
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+
+    Returns
+    ----------
+    ppgs_out (numpy.array) : All of the PPGS returned from WhisperX force alignment for each file
+    phoneme_dict_out (dict) : Returns the dictionary linking the index and phonemes outputted by WhisperX
+    output_word_alignment (list) : The aligned word-transcription for each file
+    '''
 
     current_time = datetime.now()
 
-    audio_files = output_ind_df["file_path"]
+    audio_files = input_df["file_path"]
 
     # use device from config and check if GPU is available
     device = "cpu"
@@ -88,7 +104,7 @@ def whisperx_get_ppgs(output_ind_df, config_file): # (audio_file, device)
                 char_data["end"] = np.min([char_data["end"] - file_index*(TOTAL_AUDIO_LENGTH+PAD_IN_SECONDS), TOTAL_AUDIO_LENGTH])
                 result_aligned_all[file_index].append(char_data)
 
-    for index, df_row in output_ind_df.iterrows():
+    for index, df_row in input_df.iterrows():
 
         for char_data in result_aligned_all[index]:
             p_label = char_data["char"]

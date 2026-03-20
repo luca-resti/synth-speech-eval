@@ -1,7 +1,16 @@
 import numpy as np
 
 
+PDSM_INFO = {
+    "pdsm_sq_mos":[],
+    "pdsm_sq_noi":[],
+    "pdsm_sq_dis":[],
+    "pdsm_sq_col":[],
+    "pdsm_sq_loud":[],
+}
 THRESHOLD_VALUE = 0.4
+COUNT_AS_DOUBLE_PAD = 5 # 50 ms
+
 
 def thresh_abs(x):
     out_x = np.abs(x)
@@ -13,7 +22,55 @@ def l2_norm(x):
     return np.power(np.sum(np.power(x, 2)), 1/2)
 
 
+def get_preprocess_and_pool(config_file):
+    """
+    Returns the preprocess and pooling functions wanted from the config file
+
+    Parameters
+    ----------
+    config_file (dict) : input config file detailing the options to run the evaluation with
+
+    Returns
+    ----------
+    preprocess_fn : Function determining the preprocess function as detailed in paper
+    pool_fn : Function determining the pooling function as detailed in paper
+    """
+    
+    if config_file["pdsm"]["preprocess"] == "abs":
+        pdsm_preprocess = np.abs
+    elif config_file["pdsm"]["preprocess"] == "thresh_abs":
+        pdsm_preprocess = thresh_abs
+
+    if config_file["pdsm"]["pool"] == "mean":
+        pdsm_pool = np.mean
+    elif config_file["pdsm"]["pool"] == "sum":
+        pdsm_pool = np.sum
+    elif config_file["pdsm"]["pool"] == "l2_norm":
+        pdsm_pool = l2_norm
+    
+    return pdsm_preprocess, pdsm_pool
+
+
 def PDSM(saliency_map, ppg, ppg_dict, preprocess_fn, pool_fn, k_method, k):
+    """
+    Runs PDSM algorithm as described in [1]S. Gupta, M. Ravanelli, P. Germain, and C. Subakan, “Phoneme Discretized Saliency Maps for Explainable Detection of AI-Generated Voice,” Sep. 2024, [Online]. Available: http://arxiv.org/abs/2406.10422
+
+    Parameters
+    ----------
+    saliency_map (numpy.array) : Saliency map for a given input to the SQ_AST model
+    ppg (numpy.array) : Phoneme PosteriorGram showing the Confidence of phonemes over time
+    ppg_dict (dict) : Dictionary showing the translation of indeces to phonemes
+    preprocess_fn : Function determining the preprocess function as detailed in paper
+    pool_fn : Function determining the pooling function as detailed in paper
+    k_method (str) : "threshold" or "percent" for k most important phonemes
+    k (float) : if threshold, k is the number of important phonemes, 
+        else it is a ratio of the number of phonemes in utterance
+
+    Returns
+    ----------
+    m_out (numpy.array) : Output mask of most important phonemes
+    phonemes_return (list) : List of dicts with information on each important phoneme
+    """
 
     # preprocess step
     m_pp = preprocess_fn(saliency_map)
@@ -63,10 +120,20 @@ def PDSM(saliency_map, ppg, ppg_dict, preprocess_fn, pool_fn, k_method, k):
     return m_out, phonemes_return
 
 
-COUNT_AS_DOUBLE_PAD = 5 # 50 ms
-
-
 def get_bulk_hists_for_system(df, dim):
+    """
+    Gets the system-wide histograms for most important phonemes
+
+    Parameters
+    ----------
+    df (pandas.dataframe) : Input dataframe to gather hist data
+    dim (str) : Dimension to run analysis on
+    
+    Returns
+    ----------
+    single_phoneme_hist (dict) : Histogram data for single phonemes (returns None if empty)
+    double_phoneme_hist (dict) : Histogram data for phonemes-pairs (returns None if empty)
+    """
 
     single_phoneme_hist = {}
     double_phoneme_hist = {}
