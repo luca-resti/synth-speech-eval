@@ -1,7 +1,6 @@
 output_dir : ./outputs/
 path : ./inputs/
 dataset_name : test
-device : cpu
 language: en
 
 score_threshold : 3

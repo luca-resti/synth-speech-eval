@@ -3,6 +3,7 @@ from models import ppgs_wrapper
 from models import pdsm
 from util import plot_helper, kde_tools, config_util
 
+import torch
 import sys
 import os
 import yaml
@@ -223,4 +224,11 @@ if __name__ == "__main__":
             config_file_alt = yaml.safe_load(f)
         config_file = config_util.deep_merge(config_file, config_file_alt)
 
+    # get gpu availability
+    if torch.cuda.is_available():
+        config_file["device"] = "cuda"
+    else:
+        config_file["device"] = "cpu"
+
     run_eval(config_file)
+

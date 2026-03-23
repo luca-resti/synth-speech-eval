@@ -335,10 +335,7 @@ def sq_ast_fw(config_file):
         data_dir = input_dir + "/"
     
     # get device from config and check if GPU is available
-    if config_file["device"] == "gpu" and torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
+    device = config_file["device"]
 
     print(f"Starting SQ_AST Preprocessing")
 

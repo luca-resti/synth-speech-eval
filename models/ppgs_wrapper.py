@@ -36,11 +36,11 @@ def whisperx_get_ppgs(input_df, config_file):
     audio_files = input_df["file_path"]
 
     # use device from config and check if GPU is available
-    device = "cpu"
+    device = config_file["device"]
     compute_type = "int8"
-    if config_file["device"] == "gpu": 
+    if config_file["device"] == "cuda": 
         device = "cuda"
-        compute_type = "float16"
+        compute_type = "float16" # should run float16 if on cuda
 
     model = whisperx.load_model("small", device=device, compute_type=compute_type)
     model_a, metadata = whisperx.load_align_model(
