@@ -1,7 +1,7 @@
 # Wafaa Wardah, TU-Berlin, 2025
 # Modified by Ben Heritage 2026 to extract attention flow
 
-import multiprocessing as mp, threading, sys, gc, logging, os
+import os
 import pandas as pd
 import torch
 import torchaudio

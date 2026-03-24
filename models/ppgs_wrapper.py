@@ -7,7 +7,11 @@ from datetime import datetime
 from models import sq_ast_mod
 
 # Set for espeak requirement (default location)
-os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
+if os.environ.get('OS','') == 'Windows_NT':
+    os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
+else:
+    os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1" 
+    os.environ['PHONEMIZER_ESPEAK_PATH'] = "/usr/bin/espeak-ng"
 
 PAD_IN_SECONDS = 1.0
 TOTAL_AUDIO_LENGTH = sq_ast_mod.MAX_AUDIO_LEN

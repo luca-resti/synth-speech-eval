@@ -7,7 +7,6 @@ import torch
 import sys
 import os
 import yaml
-import pandas as pd
 import numpy as np
 from datetime import datetime
 import warnings
@@ -227,8 +226,12 @@ if __name__ == "__main__":
     # get gpu availability
     if torch.cuda.is_available():
         config_file["device"] = "cuda"
+        print(f" === USING GPU === ")
     else:
+        print(f" === USING CPU === ")
         config_file["device"] = "cpu"
 
     run_eval(config_file)
+
+    input("Press [ENTER] to end:")
 

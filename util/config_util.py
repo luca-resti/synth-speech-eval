@@ -1,5 +1,4 @@
 import collections.abc
-import yaml
 
 def deep_merge(base, overrides):
     """
