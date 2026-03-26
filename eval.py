@@ -1,7 +1,7 @@
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
-from util import plot_helper, kde_tools, config_util
+from util import plot_helper, kde_tools, config_util, audio_segmentation
 
 import torch
 import sys
@@ -12,6 +12,7 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
+import pandas as pd
 
 def run_eval(config_file):
     '''
@@ -29,13 +30,22 @@ def run_eval(config_file):
     '''
     start_time = datetime.now()
 
+    input_df = audio_segmentation.get_input_dataset(config_file)
+
+    if len(input_df) == 0:
+        print("Input Dataset has no valid audio files")
+        exit()
+
     # create output directories
     output_dir = ""
     if str(config_file["dataset_name"]).endswith(".wav"): 
         dataset_name = os.path.basename(str(config_file["dataset_name"]).replace('.wav',''))
-        output_dir = config_file["output_dir"] + "/" + dataset_name + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
+        output_dir_base = config_file["output_dir"] + "/" + dataset_name + "/"
     else:
-       output_dir = config_file["output_dir"] + "/" + config_file["dataset_name"] + "_" +  start_time.strftime("%Y%m%d_%H%M") + "/"
+       output_dir_base = config_file["output_dir"] + "/" + config_file["dataset_name"] + "/"
+    if not os.path.exists(output_dir_base):
+        os.makedirs(output_dir_base)
+    output_dir =  output_dir_base +  start_time.strftime("%Y%m%d_%H%M") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     output_sysfig_dir = output_dir + "/sys_analysis/"
@@ -48,7 +58,7 @@ def run_eval(config_file):
     output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
 
     # unpack sq_ast outputs
-    sq_ast_ds, sq_ast_pred, saliency_maps, fbank_lengths, output_ind_df = sq_ast_mod.sq_ast_fw(config_file)
+    sq_ast_ds, sq_ast_pred, saliency_maps, fbank_lengths, output_ind_df = sq_ast_mod.sq_ast_fw(config_file, input_df)
 
     # plot system violin plots
     if config_file["plots"]["output_sys_violin"]:
@@ -59,6 +69,17 @@ def run_eval(config_file):
 
     # threshold dataframe
     output_ind_df_thresh = sq_ast_mod.get_thresholded_df(output_ind_df, config_file["score_threshold"])
+
+    # make output directories
+    for index, df_row in output_ind_df_thresh.iterrows():
+        individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" #remove ".wav"
+        if not os.path.exists(individual_dir):
+            os.makedirs(individual_dir)
+        if df_row["total_wav_channels"] > 1:
+            individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" + "ch" + str(df_row["wav_channel"]) + "/"
+            if not os.path.exists(individual_dir):
+                os.makedirs(individual_dir)
+
 
     # only run analysis if the thresholded dataframe is non empty
     if len(output_ind_df_thresh) > 0:
@@ -77,13 +98,23 @@ def run_eval(config_file):
         pdsm_info = pdsm.PDSM_INFO
 
         # get kernel density estimate for both time and frequency domain
-        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(sq_ast_mod.MAX_AUDIO_LEN/sq_ast_mod.SQ_HOP_SIZE)), dtype=np.float32)
+        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(sq_ast_mod.SALIENCY_INTERP_SIZE[1])), dtype=np.float32)
         kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), sq_ast_mod.SQ_MEL_FREQ), dtype=np.float32)
 
         # gather information on each thresholded audio file
         for file_idx, df_row in output_ind_df_thresh.iterrows():
             file_path = df_row["file_path"]
+            file_tot_channels = df_row["total_wav_channels"]
+            file_channel = df_row["wav_channel"]
+            file_total_wav_segments = df_row["total_wav_segments"]
+            file_wav_segment = df_row["wav_segment"]
+            file_wav_segment_info = (df_row["wav_start"], df_row["wav_end"])
             pre_thresh_index = df_row["pre_threshold_index"]
+
+            if file_tot_channels == 1:
+                individual_base_folder = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/"
+            else:
+                individual_base_folder = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/ch" + str(file_channel) + "/"
 
             ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[file_idx][1]]
 
@@ -132,19 +163,19 @@ def run_eval(config_file):
                         # save pdsm overlay
                         if (config_file["plots"]["output_pdsm_saliency_overlay"]):
                             plot_helper.plot_saliency_with_pdsm(
-                                config_file, pre_thresh_index, file_path,
+                                config_file, pre_thresh_index, file_path, file_wav_segment,
                                 mel_spec, saliency_rescaled, fbank_lengths[file_idx][1], 
                                 dim, dim_phon, dim_pdsm, sq_ast_pred[file_idx, dim_index], 
-                                output_individual_dir
+                                individual_base_folder
                             )
 
                         # save kde overlay with saliency and spectrogram
                         if (config_file["plots"]["output_joint_kde"]):
                             plot_helper.plot_saliency_jointgrid(
-                                config_file, pre_thresh_index, file_path,
+                                config_file, pre_thresh_index, file_path, file_wav_segment,
                                 mel_spec, saliency_rescaled, kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
                                 dim, word_alignments[file_idx], sq_ast_pred[file_idx, dim_index], 
-                                output_individual_dir
+                                individual_base_folder
                             )
 
                 else:
@@ -154,17 +185,18 @@ def run_eval(config_file):
             # save kde over time
             if (config_file["plots"]["output_time_kde"]):
                 plot_helper.plot_kde_along_waveform(
-                    config_file, pre_thresh_index, file_path,
+                    config_file, pre_thresh_index, file_path, file_wav_segment, file_channel, file_wav_segment_info,
                     kde_x_info[file_idx, :, :fbank_lengths[file_idx][1]], word_alignments[file_idx], 
                     sq_ast_mod.ALL_DIMS, sq_ast_pred[file_idx, :],
-                    output_individual_dir, 
+                    individual_base_folder
                 )
 
             # save asr confidence for each word in transcription
             if (config_file["plots"]["output_asr_confidence"]):
                 plot_helper.plot_asr_confidence_along_waveform(
-                    config_file, file_path, pre_thresh_index,
-                    word_alignments[file_idx], output_individual_dir
+                    config_file, file_path, file_wav_segment, file_channel, file_wav_segment_info,
+                    pre_thresh_index, word_alignments[file_idx],
+                    individual_base_folder
                 )
 
         # save system level frequency kde
@@ -225,13 +257,13 @@ if __name__ == "__main__":
 
     # get gpu availability
     if torch.cuda.is_available():
-        config_file["device"] = "cuda"
         print(f" === USING GPU === ")
+        config_file["device"] = "cuda"
     else:
         print(f" === USING CPU === ")
         config_file["device"] = "cpu"
 
     run_eval(config_file)
 
-    input("Press [ENTER] to end:")
+    #input("Press [ENTER] to end:")
 

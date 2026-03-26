@@ -5,11 +5,14 @@ import numpy as np
 import os
 from datetime import datetime
 from models import sq_ast_mod
+import torchaudio
 
 # Set for espeak requirement (default location)
 if os.environ.get('OS','') == 'Windows_NT':
+    print(f" === WINDOWS === ")
     os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
 else:
+    print(f" === LINUX === ")
     os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1" 
     os.environ['PHONEMIZER_ESPEAK_PATH'] = "/usr/bin/espeak-ng"
 
@@ -35,9 +38,9 @@ def whisperx_get_ppgs(input_df, config_file):
     output_word_alignment (list) : The aligned word-transcription for each file
     '''
 
-    current_time = datetime.now()
+    input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
 
-    audio_files = input_df["file_path"]
+    current_time = datetime.now()
 
     # use device from config and check if GPU is available
     device = config_file["device"]
@@ -54,10 +57,31 @@ def whisperx_get_ppgs(input_df, config_file):
     )
 
     # get ppgs by the batch of audio files
-    batch_audio = np.zeros((1, int((len(audio_files)*(TOTAL_AUDIO_LENGTH+PAD_IN_SECONDS))*WHISPERX_FS)), dtype=np.float32) # only works for float32?
+    batch_audio = np.zeros((1, int((len(input_df)*(TOTAL_AUDIO_LENGTH+PAD_IN_SECONDS))*WHISPERX_FS)), dtype=np.float32) # only works for float32?
 
-    for index, filename in enumerate(audio_files):
-        audio = whisperx.load_audio(filename)
+    for index, row in input_df.iterrows():
+        filename = row["file_path"]
+        audio, sample_rate = torchaudio.load(os.path.join(input_dir, filename))
+
+        # get channel of waveform
+        if audio.shape[0] > 1:
+            audio = audio[row['wav_channel'], :]
+        else:
+            audio = audio.squeeze()
+
+        # get segment of waveform
+        audio = audio[row['wav_start']:row['wav_end']]
+
+        # resample before segment
+        if sample_rate != WHISPERX_FS:
+            resampler = torchaudio.transforms.Resample(
+                orig_freq=sample_rate,
+                new_freq=WHISPERX_FS
+            )
+            audio = resampler(audio)
+            sample_rate = WHISPERX_FS
+
+        audio = audio.numpy().astype(np.float32)
 
         # trim to max length of 10 seconds for ppgs extraction
         if audio.shape[0] > TOTAL_AUDIO_LENGTH*WHISPERX_FS:
@@ -68,12 +92,12 @@ def whisperx_get_ppgs(input_df, config_file):
 
     vocab = metadata["dictionary"] # get the phoneme list
     phoneme_to_idx = {p: i for i, p in enumerate(vocab)}
-    ppgs_out = np.zeros((len(audio_files), 1, len(vocab), int(TOTAL_AUDIO_LENGTH/DESIRED_FRAME_DURATION)))
+    ppgs_out = np.zeros((len(input_df), 1, len(vocab), int(TOTAL_AUDIO_LENGTH/DESIRED_FRAME_DURATION)))
     sil_idx = vocab["</s>"]
 
     preproc_time = datetime.now()
     print(f"WhisperX Preprocessing completed in time: {preproc_time - current_time}")
-    print(f"Running WhisperX Inference on {len(audio_files)} audio files.")
+    print(f"Running WhisperX Inference on {len(input_df)} audio files.")
 
     audio = batch_audio[0, :]
     result = model.transcribe(audio, batch_size=int(config_file["whisperx"]["batch_size"]), chunk_size=2) # chunk size determined to recover silences
@@ -90,7 +114,7 @@ def whisperx_get_ppgs(input_df, config_file):
         result["segments"], model_a, metadata, audio, device, return_char_alignments=True
     )
 
-    output_word_alignment = [[] for i in range(len(audio_files))]
+    output_word_alignment = [[] for i in range(len(input_df))]
     for segment in result_aligned_words["segments"]:
         for word_segment in segment["words"]:
             if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
@@ -99,7 +123,7 @@ def whisperx_get_ppgs(input_df, config_file):
                 word_segment["end"] = np.min([word_segment["end"] - file_index*(TOTAL_AUDIO_LENGTH+PAD_IN_SECONDS), TOTAL_AUDIO_LENGTH])
                 output_word_alignment[file_index].append(word_segment)
 
-    result_aligned_all = [[] for i in range(len(audio_files))]
+    result_aligned_all = [[] for i in range(len(input_df))]
     for segment in result_aligned["segments"]:
         for char_data in segment["chars"]:
             if ("start" in char_data.keys()) and ("end" in char_data.keys()):

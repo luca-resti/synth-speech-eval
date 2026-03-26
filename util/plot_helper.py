@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import seaborn as sns
-from scipy import io
+import torchaudio
 
 MAX_PHONEME_PLOT = 10
 
@@ -67,7 +67,7 @@ def plot_phoneme_hists(
     return 0
 
 def plot_saliency_with_pdsm(
-        config_file, file_idx, file_path,
+        config_file, file_idx, file_path, file_segment,
         spectrogram, saliency_map, fbank_length, 
         dim, dim_phon, dim_pdsm, sq_ast_pred_i, 
         output_dir
@@ -81,6 +81,7 @@ def plot_saliency_with_pdsm(
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
     file_idx (int) : Original dataset index for audio file 
     file_path (os.path) : Path to the audio file
+    file_segment (int) : Segment index of audio file
     spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
     saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
     fbank_length (int) : Time dimension of spectrogram (as max is parsed into spectrogram arg)
@@ -121,11 +122,11 @@ def plot_saliency_with_pdsm(
     plt.ylabel("Mel Frequency Bin")
 
     if config_file["pdsm"]["k_method"] == "threshold":
-        plt.suptitle(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
+        plt.suptitle(f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
     elif config_file["pdsm"]["k_method"] == "percent":
-        plt.suptitle(f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
+        plt.suptitle(f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
 
-    plt.savefig(os.path.join(output_dir, f"Phoneme_{file_idx}_{dim}.png"))
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_Phoneme.png"))
     plt.clf()
     plt.close()
 
@@ -133,7 +134,7 @@ def plot_saliency_with_pdsm(
 
 
 def plot_saliency_jointgrid(
-        config_file, file_idx, file_path, 
+        config_file, file_idx, file_path, file_segment,
         spectrogram, saliency_map, kde_x_est, kde_y_est, 
         dim, result_word_alignment, sq_ast_pred_i, 
         output_dir
@@ -146,6 +147,7 @@ def plot_saliency_jointgrid(
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
     file_idx (int) : Original dataset index for audio file 
     file_path (os.path) : Path to the audio file
+    file_segment (int) : Segment index of audio file
     spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
     saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
     kde_x_est (np.array) : KDE for the time dimension
@@ -211,11 +213,11 @@ def plot_saliency_jointgrid(
         )
     elif config_file["pdsm"]["k_method"] == "percent":
         g.fig.suptitle(
-            f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
+            f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
             fontsize=16, y=1.03
         )
 
-    plt.savefig(os.path.join(output_dir, f"KDE_Word_{file_idx}_{dim}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_KDE_Word.png"), bbox_inches='tight')
     plt.close()
 
     return 0
@@ -270,7 +272,7 @@ def plot_sys_violin_plot(
 
 
 def plot_kde_along_waveform(
-        config_file, file_idx, wav_path,
+        config_file, file_idx, wav_path, file_segment, channel, segment_info, 
         time_kdes, result_word_alignment, 
         all_dims, sq_ast_scores,
         output_dir, 
@@ -283,6 +285,9 @@ def plot_kde_along_waveform(
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
     file_idx (int) : Original dataset index of the wav file
     wav_path (os.path) : Path to the wav file
+    file_segment (int) : Segment index of audio file
+    channel (int) : channel of wavfile to read
+    segment_info (tuple) : start and end samples of segment
     time_kdes (numpy.array) : Kernel density estimation over time for a single audio file
     result_word_alignment (list) : ASR word alignment for the given audio file
     all_dims (list) : SQ_AST dimensions to run
@@ -294,7 +299,16 @@ def plot_kde_along_waveform(
     0 : 
     '''
 
-    fs_test, audio_test = io.wavfile.read(wav_path)
+    input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
+    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, wav_path))
+    # get channel of waveform
+    if audio_test.shape[0] > 1:
+        audio_test = audio_test[channel, :]
+    else:
+        audio_test = audio_test.squeeze()
+    # get segment of waveform
+    audio_test = audio_test[segment_info[0]:segment_info[1]].numpy()
+
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
@@ -373,14 +387,14 @@ def plot_kde_along_waveform(
 
     plt.suptitle(f"File: {wav_path}, Importance over Time For Sound Quality Metrics")
 
-    plt.savefig(os.path.join(output_dir, f"KDE_Time_Word_{file_idx}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_KDE_Time_Word.png"), bbox_inches='tight')
     plt.close()
 
     return 0
 
 
 def plot_asr_confidence_along_waveform(
-        config_file, wav_path, file_idx,
+        config_file, wav_path, file_segment, channel, segment_info, file_idx,
         result_word_alignment, output_dir
     ):
     '''
@@ -390,6 +404,9 @@ def plot_asr_confidence_along_waveform(
     ----------
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
     wav_path (os.path) : Path to the wav file
+    file_segment (int) : Segment index of audio file
+    channel (int) : channel of wavfile to read
+    segment_info (tuple) : start and end samples of segment
     file_idx (int) : Original dataset index of the wav file
     result_word_alignment (list) : ASR word alignment for the given audio file
     output_dir (os.path) : output directory for figure
@@ -399,7 +416,15 @@ def plot_asr_confidence_along_waveform(
     0 : 
     '''
 
-    fs_test, audio_test = io.wavfile.read(wav_path)
+    input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
+    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, wav_path))
+    # get channel of waveform
+    if audio_test.shape[0] > 1:
+        audio_test = audio_test[channel, :]
+    else:
+        audio_test = audio_test.squeeze()
+    # get segment of waveform
+    audio_test = audio_test[segment_info[0]:segment_info[1]].numpy()
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
@@ -470,7 +495,7 @@ def plot_asr_confidence_along_waveform(
 
     plt.suptitle(f"{config_file["dataset_name"]}, File: {wav_path}, ASR Confidence For Each Word")
 
-    plt.savefig(os.path.join(output_dir, f"ASR_Confidence_{file_idx}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_ASR_Confidence.png"), bbox_inches='tight')
     plt.close()
 
     return 0
