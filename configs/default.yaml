@@ -35,3 +35,4 @@ plots :
   output_phoneme_hist : True
   output_double_phoneme_hist : True
   
+  output_asr_confidence_violin : True

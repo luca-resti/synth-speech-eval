@@ -92,6 +92,17 @@ def run_eval(config_file):
         # run through WhisperX model for ppg and aligned transcriptions
         ppgs_pred, ppgs_dict, word_alignments = ppgs_wrapper.whisperx_get_ppgs(output_ind_df_thresh, config_file)
 
+        agg_asr_confidence = np.zeros(shape=(len(output_ind_df_thresh), 2))
+        for seg_index, seg_word_alignments in enumerate(word_alignments):
+            agg_asr_confidence[seg_index, :] = ppgs_wrapper.get_agg_asr_confidence(seg_word_alignments)
+        output_ind_df_thresh["mean_asr_conf"] = agg_asr_confidence[:, 0]
+        output_ind_df_thresh["median_asr_conf"] = agg_asr_confidence[:, 1]
+
+        if config_file["plots"]["output_asr_confidence_violin"]:
+            plot_helper.plot_sys_asr_conf_violin_plot(
+                config_file, output_ind_df_thresh, output_sysfig_dir
+            )
+
         pdsm_start_time = datetime.now()
 
         # get pdsm dict for output dataframe

@@ -161,3 +161,28 @@ def whisperx_get_ppgs(input_df, config_file):
         output_word_alignment
     )
 
+
+def get_agg_asr_confidence(word_alignment):
+    """
+    Gets the aggregate ASR confidence over whole audio segment
+
+    Parameters
+    ----------
+    word_alignment (dict) : word alignment data from whisperx
+
+    Returns
+    ----------
+    asr_confidence (float) : Mean and Median percentage of ASR confidence per word (0 if no words aligned)
+    """
+    mean_asr_confidence = 0.0
+    median_asr_confidence = 0.0
+
+    if len(word_alignment) > 0:
+        asr_confidence = np.zeros(shape=(len(word_alignment)), dtype=np.float32)
+        for index, word in enumerate(word_alignment):
+            asr_confidence[index] = word["score"]
+        mean_asr_confidence = np.mean(asr_confidence)
+        median_asr_confidence = np.median(asr_confidence)
+
+
+    return (mean_asr_confidence, median_asr_confidence)

@@ -271,6 +271,51 @@ def plot_sys_violin_plot(
     return 0
 
 
+def plot_sys_asr_conf_violin_plot(
+        config_file, output_df, output_dir
+    ):
+    '''
+    Plots a violin plot of the distribution of the mean and median asr confidence per segment
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    output_df (pandas.dataframe) : thresholded dataset containing the asr confidence scores
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+
+    plt.figure(figsize=(6, 8))
+
+    plot_data = [output_df[f"mean_asr_conf"], output_df[f"median_asr_conf"]]
+
+    parts = plt.violinplot(plot_data, positions=range(2), 
+                        showmeans=True, showmedians=False, showextrema=True)
+
+    for pc in parts['bodies']:
+        pc.set_facecolor('blue')
+        pc.set_edgecolor('black')
+        pc.set_alpha(0.3)
+    
+    plt.xticks(range(2), labels=["Segment Mean", "Segment Median"])
+    plt.xlabel("ASR Average Type")
+    plt.ylabel("Confidence")
+    plt.xlim(-0.5, 2 - 0.5)
+    plt.ylim(0, 1.0)
+    plt.yticks([0.1*i for i in range(11)], [str(10*i)+"%" for i in range(11)])
+    plt.title(f"Violin Plot for Average ASR Confidence per\nSegment Over {config_file['dataset_name']} Dataset Under Threshold")
+    plt.legend()
+
+    plt.savefig(os.path.join(output_dir, "asr_conf_violin.png"))
+    plt.clf()
+    plt.close()
+
+    return 0
+
+
 def plot_kde_along_waveform(
         config_file, file_idx, wav_path, file_segment, channel, segment_info, 
         time_kdes, result_word_alignment, 
