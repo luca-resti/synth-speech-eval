@@ -6,7 +6,8 @@ language: en
 score_threshold : 3
 
 saliency :
-  saliency_interp_method : bilinear
+  saliency_method : "Flow"
+  saliency_interp_method : nearest
 
 pdsm :
   k_method : percent
@@ -21,7 +22,7 @@ whisperx :
   batch_size : 32
 
 kde : 
-  bw_method : 0.05
+  bw_method : 0.10
 
 plots : 
   output_pdsm_saliency_overlay : True

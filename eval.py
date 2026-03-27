@@ -3,6 +3,7 @@ from models import ppgs_wrapper
 from models import pdsm
 from util import plot_helper, kde_tools, config_util, audio_segmentation
 
+import threading
 import torch
 import sys
 import os
@@ -11,6 +12,9 @@ import numpy as np
 from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
+
+sys.setrecursionlimit(10**9)
+threading.stack_size(10**8)
 
 import pandas as pd
 

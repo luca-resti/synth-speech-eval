@@ -58,7 +58,7 @@ class ASTXL(torch.nn.Module):
         else:
             hidden_state = self.ast(features, output_attentions=False).pooler_output
             pred = self.fc(hidden_state).squeeze()
-            return pred, attentions[0]
+            return pred
     
 
 class ASTVal(Dataset):
@@ -212,12 +212,25 @@ def tensor_attention_flow(attn_maps):
     return cls_flow[2:] # remove <CLS> and <DISTILL>
 
 
-def get_pred_attn(dims, dl, device, bs, threshold_value, num_inputs):
+def tensor_grad_cam(activations, gradients):
+    '''
+    Get GradCAM heatmap for important patches to decision on scoring.
+    '''
+    weights = torch.mean(gradients[0], dim=1)
+    cam = torch.matmul(activations[0], weights.unsqueeze(-1))
+    cam = cam.squeeze(-1)
+    cam = cam[:, 2:].squeeze()
+    cam = F.relu(cam)
+    return cam
+
+
+def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
     """
     Evaluates the SQ_AST outputs for given input and dimensions, and returns the attention flow
 
     Parameters
     ----------
+    method (str) : Method of "Flow" or "GradCAM"
     dims (list) : Dimensions to run in SQ_AST
     dl (dataloader) : Dataloader for the ASTVal input dataset
     device (str) : "cpu"/"cuda"
@@ -228,42 +241,87 @@ def get_pred_attn(dims, dl, device, bs, threshold_value, num_inputs):
     Returns
     ----------
     predictions (numpy.array) : SQ_AST prediction outputs shape (files, dimensions)
-    attention_flows (numpy.array) : SQ_AST extracted attention flow (files, dimensions, transformer layers, input tokens)
+    saliency (numpy.array) : SQ_AST extracted saliency(files, dimensions, transformer layers, input tokens)
 
     """
     
-    attention_flows = torch.Tensor(np.zeros(shape=(num_inputs, len(dims), 12, 101)))
+    saliency = torch.Tensor(np.zeros(shape=(num_inputs, len(dims), 12, 101)))
     predictions = torch.Tensor(np.zeros(shape=(num_inputs, len(dims))))
 
     for dim_index in range(len(dims)):
         dim = dims[dim_index]
             
-        with torch.no_grad():
-            with torch.inference_mode():
-                model = ASTXL()
-                model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
-                model.to(device)
-                model.eval()
+        if method == "Flow":
+            with torch.no_grad():
+                with torch.inference_mode():
+                    model = ASTXL()
+                    model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
+                    model.to(device)
+                    model.eval()
 
-                for batch_index, (index, batch_features) in enumerate(dl):
-                    print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
-                    batch_features = batch_features.float().to(device)
-                    pred, attentions = model(batch_features, output_attentions=True)
-                    attentions = attentions.cpu().detach()
-                    if (bs == 1) or (pred.dim() == 0):
-                        predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
-                        if 4*pred + 1 <= threshold_value:
-                            attention_flow = tensor_attention_flow(attentions[0].cpu().detach())
-                            attention_flows[index, dim_index, :, :] = attention_flow.reshape(12, 101)
-                    else:
-                        for i in index:
-                            predictions[i, dim_index] = 4*pred[i-int(bs*batch_index)] + 1 # store prediction for this SQ dimension
-                            if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
-                                attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
-                                attention_flows[i, dim_index, :, :] = attention_flow.reshape(12, 101)
-                print("\n\r", end="")
+                    for batch_index, (index, batch_features) in enumerate(dl):
+                        print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
+                        batch_features = batch_features.float().to(device)
+                        pred, attentions = model(batch_features, output_attentions=True)
+                        attentions = attentions.cpu().detach()
+                        if (bs == 1) or (pred.dim() == 0):
+                            predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
+                            if 4*pred + 1 <= threshold_value:
+                                attention_flow = tensor_attention_flow(attentions[0].cpu().detach())
+                                saliency[index, dim_index, :, :] = attention_flow.reshape(12, 101)
+                        else:
+                            for i in index:
+                                predictions[i, dim_index] = 4*pred[i-int(bs*batch_index)] + 1 # store prediction for this SQ dimension
+                                if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
+                                    attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
+                                    saliency[i, dim_index, :, :] = attention_flow.reshape(12, 101)
+                    print("\n\r", end="")
 
-    return predictions, attention_flows
+        elif method == "GradCAM":
+            model = ASTXL()
+            model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
+            model.to(device)
+            model.eval()
+
+            activations = [None]
+            gradients = [None]
+
+            def save_activation(module, input, output):
+                activations[0] = output
+
+            def save_gradient(module, grad_input, grad_output):
+                gradients[0] = grad_output[0]
+
+            target_layer = model.ast.encoder.layer[-1] # get last transformer layer
+            forward_handle = target_layer.register_forward_hook(save_activation)
+            backward_handle = target_layer.register_full_backward_hook(save_gradient)
+
+            for batch_index, (index, batch_features) in enumerate(dl):
+                print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
+                batch_features = batch_features.float().to(device)
+                batch_features.requires_grad = True 
+                pred_sal = model(batch_features, output_attentions=False)
+                pred = pred_sal.cpu().detach()
+
+                # batch_size always 1 for GradCAM
+                predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
+                if 4*pred + 1 <= threshold_value:
+                    model.zero_grad()
+                    pred_sal.backward()
+                    grad_cam_saliency = tensor_grad_cam(activations, gradients).cpu().detach()
+                    saliency[index, dim_index, :, :] = grad_cam_saliency.reshape(12, 101)
+
+            print("\n\r", end="")
+            
+            # free handle memory
+            forward_handle.remove()
+            backward_handle.remove()
+
+        else:
+            raise ValueError("Saliency Method Not Given")
+    
+
+    return predictions, saliency
 
 
 def sq_ast_fw(config_file, input_df):
@@ -299,11 +357,15 @@ def sq_ast_fw(config_file, input_df):
     if bs > len(input_df):
         bs = int(len(input_df))
 
+    # Method only accepts batch size of 1
+    if config_file["saliency"]["saliency_method"] == "GradCAM":
+        bs = 1
+
     # create dataset for sq_ast
     dl, ds, fbank_lengths = prepare_dataloader(input_dir, input_df, bs, num_workers)
 
     # get the predictions and attention flows for each dimension
-    predictions, saliency_map = get_pred_attn(dims, dl, device, bs, config_file["score_threshold"], len(input_df))
+    predictions, saliency_map = get_pred_attn(config_file["saliency"]["saliency_method"], dims, dl, device, bs, config_file["score_threshold"], len(input_df))
 
     print(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
 
