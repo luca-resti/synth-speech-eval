@@ -64,15 +64,13 @@ def get_input_dataset(config_file):
         db_name = os.path.basename(data_dir)
         file_paths = [os.path.basename(f) for f in os.listdir(data_dir) if f.endswith('.wav')]
     else: 
-        db_name = os.path.basename(str(wav_path).replace('.wav',''))
-        file_paths = [wav_path]
+        db_name = ""
+        data_dir = wav_path
+        file_paths = [""]
 
     for file_index in range(len(file_paths)):
         file_path = file_paths[file_index]
-        if data_dir:
-            audio, sample_rate = torchaudio.load(os.path.join(data_dir, file_path))
-        else:
-            audio, sample_rate = torchaudio.load(file_path)
+        audio, sample_rate = torchaudio.load(os.path.join(data_dir, file_path))
 
         audio_len = audio.shape[1]
         if audio_len >= sample_rate*MIN_AUDIO_LEN:
