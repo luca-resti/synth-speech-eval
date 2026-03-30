@@ -1,5 +1,28 @@
-# Wafaa Wardah, TU-Berlin, 2025
-# Modified by Ben Heritage 2026 to extract attention flow
+# Original code Copyright (c) 2025 Wafaa Wardah (MIT License pasted below)
+# Modifications by Ben Heritage 2026 to extract saliency
+# """
+# MIT License
+
+# Copyright (c) 2025 Wafaa Wardah
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# """
 
 import os
 import pandas as pd
@@ -215,6 +238,15 @@ def tensor_attention_flow(attn_maps):
 def tensor_grad_cam(activations, gradients):
     '''
     Get GradCAM heatmap for important patches to decision on scoring.
+
+    Paramaters
+    ----------
+    activations (torch.tensor) : Activations stored from the SQ_AST forward pass
+    gradients (torch.tensor) : Gradients stored from the SQ_AST backward pass
+    
+    Returns
+    ----------
+    cam (torch.tensor) : The saliency from GradCAM for the last attention layer in SQ_AST
     '''
     weights = torch.mean(gradients[0], dim=1)
     cam = torch.matmul(activations[0], weights.unsqueeze(-1))
