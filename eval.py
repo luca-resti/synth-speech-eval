@@ -60,6 +60,9 @@ def run_eval(config_file):
         os.makedirs(output_individual_dir)
     output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
     output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
+    output_dir_csv_sorted = os.path.join(output_dir, "sorted_csvs/")
+    if not os.path.exists(output_dir_csv_sorted):
+        os.makedirs(output_dir_csv_sorted)
 
     # Validate dims
     config_file["sq_ast_dims"] = sq_ast_mod.sq_ast_validate_dims(config_file["sq_ast_dims"])
@@ -94,6 +97,11 @@ def run_eval(config_file):
             if not os.path.exists(individual_dir):
                 os.makedirs(individual_dir)
 
+    for dim in config_file["sq_ast_dims"]:
+        output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
+        if len(output_ind_df_thresh_for_row) > 0:
+            output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
+            output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_csv_sorted, f"thredholded_sorted_sq_{dim}.csv"), index=False, sep="\t")
 
     # only run analysis if the thresholded dataframe is non empty
     if len(output_ind_df_thresh) > 0:
