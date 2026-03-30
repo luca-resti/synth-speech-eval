@@ -81,23 +81,27 @@ def plot_saliency_with_pdsm(
     plt.figure(figsize=(15, 10))
     plt.subplot(2, 1, 1)
     plt.imshow(spectrogram.T, aspect='auto', origin='lower', cmap='gray')
-    plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
+
+    # RGBA image of pdsm
+    pdsm_image = np.array([np.ceil(dim_pdsm), np.zeros_like(dim_pdsm), np.zeros_like(dim_pdsm), dim_pdsm])
+    pdsm_image = np.moveaxis(pdsm_image, 0, -1)
+    plt.imshow(pdsm_image, aspect='auto', origin='lower')
+    
     plt.xlim(0, fbank_length)
     plt.xticks(tick_indices, tick_times)
     plt.ylim(0, 128)
 
     y_offset_index = 0
     for phon in dim_phon:
-        y_offset =  128*0.9 - 128*0.1*(y_offset_index%8)
-        plt.text((phon[2]+phon[3])*0.5, y_offset, phon[1], fontdict={"fontsize":6, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
+        phon_text = str(y_offset_index+1) + "\n" + phon[1]
+        plt.text((phon[2]+phon[3])*0.5, 0.9*128, phon_text, fontdict={"fontsize":5, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
         y_offset_index += 1
     plt.title("Mel-Spectrogram With Most Important Phonemes")
     plt.xlabel("Time in Seconds")
     plt.ylabel("Mel Frequency Bin")
 
     plt.subplot(2, 1, 2)
-    pos = plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
-    plt.colorbar(pos)
+    plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
     plt.xlim(0, fbank_length)
     plt.xticks(tick_indices, tick_times)
     plt.ylim(0, 128)

@@ -106,16 +106,14 @@ def PDSM(saliency_map, ppg, ppg_dict, preprocess_fn, pool_fn, k_method, k):
         max_indices = np.argsort(phoneme_energy)[-k_percent:]
 
     # initialise discretised output array
-    m_out = np.zeros_like(saliency_map)
+    m_out = np.zeros_like(saliency_map, dtype=np.float32)
 
     # check whether the phonemes are in the max indeces array
-    index = 0
     phonemes_return = []
-    for _, _, start, end in phonemes:
-        if index in max_indices:
-            m_out[:, start:end] = 1
-            phonemes_return.append(phonemes[index])
-        index += 1
+    for max_indices_index, phoneme_index in enumerate(max_indices):
+        _, _, start, end = phonemes[phoneme_index]
+        m_out[:, start:end] = 0.5 - 0.2*(max_indices_index/len(max_indices))
+        phonemes_return.append(phonemes[phoneme_index])
 
     return m_out, phonemes_return
 

@@ -118,12 +118,8 @@ def run_eval(config_file):
 
         # gather information on each thresholded audio file
         for file_idx, df_row in output_ind_df_thresh.iterrows():
-            file_path = df_row["file_path"]
             file_tot_channels = df_row["total_wav_channels"]
             file_channel = df_row["wav_channel"]
-            file_total_wav_segments = df_row["total_wav_segments"]
-            file_wav_segment = df_row["wav_segment"]
-            file_wav_segment_info = (df_row["wav_start"], df_row["wav_end"])
             pre_thresh_index = df_row["pre_threshold_index"]
 
             if file_tot_channels == 1:
