@@ -92,7 +92,7 @@ def plot_saliency_with_pdsm(
         plt.text((phon[2]+phon[3])*0.5, y_offset, phon[1], fontdict={"fontsize":6, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
         y_offset_index += 1
     plt.title("Mel-Spectrogram With Most Important Phonemes")
-    plt.xlabel("Time in 10ms Frames")
+    plt.xlabel("Time in Seconds")
     plt.ylabel("Mel Frequency Bin")
 
     plt.subplot(2, 1, 2)
@@ -102,7 +102,7 @@ def plot_saliency_with_pdsm(
     plt.xticks(tick_indices, tick_times)
     plt.ylim(0, 128)
     plt.title(f"Important Areas for {sq_ast_dim_str[dim]}")
-    plt.xlabel("Time in 10ms Frames")
+    plt.xlabel("Time in Seconds")
     plt.ylabel("Mel Frequency Bin")
     
     if file_path == "":
