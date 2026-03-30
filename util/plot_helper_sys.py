@@ -349,7 +349,7 @@ def plot_metric_corr_plot(
         plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Thresholded Dataset", fontsize=14)
         plt.savefig(os.path.join(output_dir, f"sq_metric_corr_thresh.png"), dpi=100, bbox_inches='tight')
     else:
-        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between Between\nthe Metrics over Whole Dataset", fontsize=14)
+        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Whole Dataset", fontsize=14)
         plt.savefig(os.path.join(output_dir, f"sq_metric_corr.png"), dpi=100, bbox_inches='tight')
     plt.clf()
     plt.close()

@@ -138,7 +138,9 @@ def get_bulk_hists_for_system(df, dim):
 
     for index, row in df.iterrows():
         phoneme_info = row[f"pdsm_sq_{dim}"]
-
+        # sort in terms of start times
+        phoneme_info = sorted(phoneme_info, key=lambda x: x[2])
+        # iterate over list of phonemes
         for index in range(len(phoneme_info)):
             phoneme = phoneme_info[index]
             if phoneme[1] not in single_phoneme_hist.keys():

@@ -442,11 +442,12 @@ def plot_asr_confidence_along_waveform(
     
     axs[0].set_xlim(0, len(audio_test))
     axs[0].set_xticks([0], [None])
-    axs[0].axis("off")
     axs[0].set_yticks([0, 1.0], ["0%", "100%"])
-    axs[0].set_ylabel("ASR Word Confidence")
+    axs[0].set_ylabel("Confidence")
     axs[0].set_ylim(0, 1.05) # extra 5%
-    
+    axs[0].spines['right'].set_visible(False)
+    axs[0].spines['top'].set_visible(False)
+
     axs[1].plot(audio_test)
 
     last_end = 0
