@@ -7,6 +7,7 @@ mplstyle.use('fast')
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import seaborn as sns
 
 MAX_PHONEME_PLOT = 10
 
@@ -70,7 +71,7 @@ def plot_sys_violin_plot(
 
     plt.legend(loc='lower right')
 
-    plt.savefig(os.path.join(output_dir, "sq_ast_violin.png"), dpi=100)
+    plt.savefig(os.path.join(output_dir, "sq_violin.png"), dpi=100)
     plt.clf()
     plt.close()
 
@@ -111,9 +112,55 @@ def plot_sys_bar_chart(
     
     plt.title(f"{config_file['dataset_name']}: Percentage of Segments\nUnder Threshold for Categories Over Dataset", fontsize=14)
 
-    plt.savefig(os.path.join(output_dir, "percentage_under_thresh.png"), dpi=100)
+    plt.savefig(os.path.join(output_dir, "perc_under_thresh.png"), dpi=100)
     plt.clf()
     plt.close()
+
+    return 0
+
+    
+def plot_sys_chan_bar_chart(
+        config_file, output_df, max_chans, output_dir
+    ):
+    '''
+    Plots a bar chart of percentages of samples that are below the threshold
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    output_df (pandas.dataframe) : dataset containing the output scores from SQ_AST across all dimensions
+    max_chans (int) : maximum number of wav channels in dataset
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+
+
+    if max_chans > 1:
+
+        plt.figure(figsize=(8, 8))
+
+        hist_info = {str(chan) : 0 for chan in range(max_chans)}
+
+        for chan in range(max_chans):
+            hist_info[str(chan)] = len(output_df["wav_channel"][output_df["wav_channel"] == chan])/len(output_df)
+
+        plt.bar(list(hist_info.keys()), list(hist_info.values()), color='skyblue')
+
+        plt.xticks(range(max_chans), labels=range(max_chans))
+        plt.xlabel("Wav Channel")
+        plt.ylabel("Percentage of Dataset")
+        plt.xlim(-0.5, max_chans - 0.5)
+        plt.ylim(0, 1.0)
+        plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], )
+        
+        plt.title(f"{config_file['dataset_name']}: Percentage of Wav Channel\nNumber in Thresholded Dataset", fontsize=14)
+
+        plt.savefig(os.path.join(output_dir, "wav_chan_perc.png"), dpi=100)
+        plt.clf()
+        plt.close()
 
     return 0
 
@@ -263,9 +310,48 @@ def plot_kde_for_freq_sys(
         plt.xlim(0, 128)
         plt.ylim(0, max_val*1.05)
         plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System", fontsize=14)
-        plt.savefig(os.path.join(output_dir, f"Frequency_KDE_For_Dims.png"), dpi=100)
+        plt.savefig(os.path.join(output_dir, f"frequency_KDE_for_dims.png"), dpi=100)
         plt.clf()
         plt.close()
 
     return 0
 
+def plot_metric_corr_plot(
+       config_file, output_df, all_dims, is_thresholded,
+       output_dir
+):
+    
+    '''
+    Plots a figure of Frequency Kernel Density Estimation over the entire system under threshold
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    output_df (pandas.dataframe) : dataset containing the output scores from SQ_AST across all dimensions
+    all_dims (list) : SQ_AST dimensions to run
+    is_thresholded (bool) : If the dataframe is thresholded, can see both full dataset and thresholded
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+    df_to_plot = output_df[[f"sq_{dim}" for dim in all_dims]]
+    plot_columns = {}
+    for dim in all_dims:
+        plot_columns[f"sq_{dim}"] = sq_ast_dim_str[dim]
+    df_to_plot = df_to_plot.rename(columns=plot_columns)
+
+    plt.figure(figsize=(15, 12))
+    g = sns.heatmap(df_to_plot.corr(), annot=True)
+
+    if is_thresholded:
+        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Thresholded Dataset", fontsize=14)
+        plt.savefig(os.path.join(output_dir, f"sq_metric_corr_thresh.png"), dpi=100, bbox_inches='tight')
+    else:
+        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between Between\nthe Metrics over Whole Dataset", fontsize=14)
+        plt.savefig(os.path.join(output_dir, f"sq_metric_corr.png"), dpi=100, bbox_inches='tight')
+    plt.clf()
+    plt.close()
+
+    return 0

@@ -33,7 +33,9 @@ plots :
 
   output_asr_confidence : True
   output_sys_violin : True
-  ouput_sys_bar : True
+  output_sys_bar : True
+  output_sys_pair : True
+  output_sys_wav_chan : True
   output_freq_kde : True
   
   output_phoneme_hist : True

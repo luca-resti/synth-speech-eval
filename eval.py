@@ -52,7 +52,7 @@ def run_eval(config_file):
     output_dir =  output_dir_base +  start_time.strftime("%Y%m%d_%H%M") + "/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    output_sysfig_dir = output_dir + "/sys_analysis/"
+    output_sysfig_dir = output_dir + "/system_plots/"
     if not os.path.exists(output_sysfig_dir):
         os.makedirs(output_sysfig_dir)
     output_individual_dir = output_dir + "/" + "individual_plots" + "/"
@@ -78,7 +78,7 @@ def run_eval(config_file):
         )
 
     # plot system bar chart
-    if config_file["plots"]["ouput_sys_bar"]:
+    if config_file["plots"]["output_sys_bar"]:
         plot_helper_sys.plot_sys_bar_chart(
             config_file, output_ind_df, config_file["sq_ast_dims"], 
             output_sysfig_dir
@@ -86,6 +86,23 @@ def run_eval(config_file):
 
     # threshold dataframe
     output_ind_df_thresh = sq_ast_mod.get_thresholded_df(config_file, output_ind_df)
+
+    # plot system pair plots
+    if config_file["plots"]["output_sys_bar"]:
+        plot_helper_sys.plot_metric_corr_plot(
+            config_file, output_ind_df, config_file["sq_ast_dims"], False,
+            output_sysfig_dir
+        )
+        plot_helper_sys.plot_metric_corr_plot(
+            config_file, output_ind_df_thresh, config_file["sq_ast_dims"], True,
+            output_sysfig_dir
+        )
+
+    if config_file["plots"]["output_sys_wav_chan"]:
+        plot_helper_sys.plot_sys_chan_bar_chart(
+            config_file, output_ind_df_thresh, int(np.max(output_ind_df["total_wav_channels"])), 
+            output_sysfig_dir
+        )
 
     # make output directories
     for index, df_row in output_ind_df_thresh.iterrows():
