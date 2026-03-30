@@ -71,6 +71,13 @@ def run_eval(config_file):
             output_sysfig_dir
         )
 
+    # plot system bar chart
+    if config_file["plots"]["ouput_sys_bar"]:
+        plot_helper_sys.plot_sys_bar_chart(
+            config_file, output_ind_df, sq_ast_mod.ALL_DIMS, 
+            output_sysfig_dir
+        )
+
     # threshold dataframe
     output_ind_df_thresh = sq_ast_mod.get_thresholded_df(output_ind_df, config_file["score_threshold"])
 

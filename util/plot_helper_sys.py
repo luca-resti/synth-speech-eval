@@ -77,6 +77,47 @@ def plot_sys_violin_plot(
     return 0
 
 
+def plot_sys_bar_chart(
+        config_file, output_df, all_dims, output_dir
+    ):
+    '''
+    Plots a bar chart of percentages of samples that are below the threshold
+
+    Parameters
+    ----------
+    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
+    output_df (pandas.dataframe) : dataset containing the output scores from SQ_AST across all dimensions
+    all_dims (list) : SQ_AST dimensions to run
+    output_dir (os.path) : output directory for figure
+
+    Returns
+    ----------
+    0 : 
+    '''
+
+    plt.figure(figsize=(8, 8))
+
+    label_dims = [sq_ast_dim_str[dim] for dim in all_dims]
+    plot_data = np.array([len(output_df[f"sq_{dim}"][output_df[f"sq_{dim}"] <= config_file["score_threshold"]]) for dim in all_dims])
+    plot_data = plot_data/len(output_df)
+    plt.bar(range(len(all_dims)), plot_data, color='skyblue')
+
+    plt.xticks(range(len(all_dims)), labels=label_dims)
+    plt.xlabel("Sound Quality Output Categories")
+    plt.ylabel("Percentage of Dataset")
+    plt.xlim(-0.5, len(all_dims) - 0.5)
+    plt.ylim(0, 1.0)
+    plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], )
+    
+    plt.title(f"{config_file['dataset_name']}: Percentage of Segments\nUnder Threshold for Categories Over Dataset", fontsize=14)
+
+    plt.savefig(os.path.join(output_dir, "percentage_under_thresh.png"), dpi=100)
+    plt.clf()
+    plt.close()
+
+    return 0
+
+
 def plot_sys_asr_conf_violin_plot(
         config_file, output_df, output_dir
     ):
