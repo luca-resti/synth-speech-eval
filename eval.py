@@ -1,7 +1,7 @@
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
-from util import plot_helper, kde_tools, config_util, audio_segmentation
+from util import kde_tools, config_util, audio_segmentation, plot_helper_ind, plot_helper_sys
 
 import threading
 import torch
@@ -66,7 +66,7 @@ def run_eval(config_file):
 
     # plot system violin plots
     if config_file["plots"]["output_sys_violin"]:
-        plot_helper.plot_sys_violin_plot(
+        plot_helper_sys.plot_sys_violin_plot(
             config_file, output_ind_df, sq_ast_mod.ALL_DIMS, 
             output_sysfig_dir
         )
@@ -103,7 +103,7 @@ def run_eval(config_file):
         output_ind_df_thresh["median_asr_conf"] = agg_asr_confidence[:, 1]
 
         if config_file["plots"]["output_asr_confidence_violin"]:
-            plot_helper.plot_sys_asr_conf_violin_plot(
+            plot_helper_sys.plot_sys_asr_conf_violin_plot(
                 config_file, output_ind_df_thresh, output_sysfig_dir
             )
 
@@ -177,19 +177,19 @@ def run_eval(config_file):
 
                         # save pdsm overlay
                         if (config_file["plots"]["output_pdsm_saliency_overlay"]):
-                            plot_helper.plot_saliency_with_pdsm(
-                                config_file, pre_thresh_index, file_path, file_wav_segment,
+                            plot_helper_ind.plot_saliency_with_pdsm(
+                                config_file, df_row,
                                 mel_spec, saliency_rescaled, fbank_lengths[file_idx][1], 
-                                dim, dim_phon, dim_pdsm, sq_ast_pred[file_idx, dim_index], 
+                                dim_index, sq_ast_mod.ALL_DIMS, dim_phon, dim_pdsm, 
                                 individual_base_folder
                             )
 
                         # save kde overlay with saliency and spectrogram
                         if (config_file["plots"]["output_joint_kde"]):
-                            plot_helper.plot_saliency_jointgrid(
-                                config_file, pre_thresh_index, file_path, file_wav_segment,
+                            plot_helper_ind.plot_saliency_jointgrid(
+                                config_file, df_row,
                                 mel_spec, saliency_rescaled, kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
-                                dim, word_alignments[file_idx], sq_ast_pred[file_idx, dim_index], 
+                                dim_index, sq_ast_mod.ALL_DIMS, word_alignments[file_idx],
                                 individual_base_folder
                             )
 
@@ -199,24 +199,22 @@ def run_eval(config_file):
             
             # save kde over time
             if (config_file["plots"]["output_time_kde"]):
-                plot_helper.plot_kde_along_waveform(
-                    config_file, pre_thresh_index, file_path, file_wav_segment, file_channel, file_wav_segment_info,
+                plot_helper_ind.plot_kde_along_waveform(
+                    config_file, df_row,
                     kde_x_info[file_idx, :, :fbank_lengths[file_idx][1]], word_alignments[file_idx], 
-                    sq_ast_mod.ALL_DIMS, sq_ast_pred[file_idx, :],
-                    individual_base_folder
+                    sq_ast_mod.ALL_DIMS, individual_base_folder
                 )
 
             # save asr confidence for each word in transcription
             if (config_file["plots"]["output_asr_confidence"]):
-                plot_helper.plot_asr_confidence_along_waveform(
-                    config_file, file_path, file_wav_segment, file_channel, file_wav_segment_info,
-                    pre_thresh_index, word_alignments[file_idx],
+                plot_helper_ind.plot_asr_confidence_along_waveform(
+                    config_file, df_row, word_alignments[file_idx],
                     individual_base_folder
                 )
 
         # save system level frequency kde
         if (config_file["plots"]["output_freq_kde"]):
-            plot_helper.plot_kde_for_freq_sys(
+            plot_helper_sys.plot_kde_for_freq_sys(
                 config_file, kde_y_info, sq_ast_mod.ALL_DIMS,
                 output_sysfig_dir
             )
@@ -235,7 +233,7 @@ def run_eval(config_file):
 
                 # retrieve histograms on single and double phonemes
                 single_hist, double_hist = pdsm.get_bulk_hists_for_system(thresholded_df, dim)
-                plot_helper.plot_phoneme_hists(
+                plot_helper_sys.plot_phoneme_hists(
                     config_file, dim,
                     single_hist, double_hist, 
                     output_sysfig_dir

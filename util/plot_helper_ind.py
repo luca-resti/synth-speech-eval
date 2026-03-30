@@ -1,75 +1,53 @@
 import matplotlib
-# stop runtime errors?
-matplotlib.use('Agg')
-
+import matplotlib.style as mplstyle
 import matplotlib.pyplot as plt
+# stop runtime errors and speed up plotting
+matplotlib.use('Agg')
+mplstyle.use('fast')
+plt.minorticks_off()
+
 import os
 import numpy as np
 import seaborn as sns
 import torchaudio
+from util.plot_helper_sys import sq_ast_dim_str
 
-MAX_PHONEME_PLOT = 10
+# Individual plots
 
-def plot_phoneme_hists(
-        config_file, dim,
-        single_hist, double_hist, 
-        output_dir
-    ):
+SPEC_TIME_HOP = 0.01
+TICK_HOP = 0.5
+
+def get_ticks(df_row, tick_hop, plot_hop):
     '''
-    Plots histograms of the occurance of each phoneme (and phoneme pairs) deemed important on a system level
+    Helper function to get timestamps for audio segment in plots
 
     Parameters
     ----------
-    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    dim (str) : Dimension to show saliency for
-    single_phoneme_hist (dict) : Histogram data for single phonemes (None if empty)
-    double_phoneme_hist (dict) : Histogram data for phonemes-pairs (None if empty)
-    output_dir (os.path) : output directory for figure
-
+    df_row (pandas.dataframe) : Dataset row of information for segment
+    tick_hop (float) : Hop to scale indices to
+    plot_hop (float) : Time per sample in segment
+    
     Returns
     ----------
-    0 : 
+    tick_times (numpy.array) : Time labels for the ticks extracted
+    tick_indices (numpy.array) : Indices for the ticks extracted
     '''
+    file_wav_segment_info = (df_row["wav_start"], df_row["wav_end"])
+    file_fs = df_row["file_fs"]
 
-    thresh_val = config_file["score_threshold"]
-    output_phoneme_hist = config_file["plots"]["output_phoneme_hist"]
-    output_double_phoneme_hist = config_file["plots"]["output_double_phoneme_hist"]
-    dataset_name = config_file["dataset_name"]
+    start_time = file_wav_segment_info[0] / file_fs
+    first_tick_time = np.ceil(start_time / tick_hop) * tick_hop
+    duration = (file_wav_segment_info[1] - file_wav_segment_info[0]) / file_fs
+    tick_times = np.arange(first_tick_time, start_time + duration, tick_hop)
+    tick_indices = np.array([(t - start_time) / plot_hop for t in tick_times])
 
-    if (single_hist is not None) and (output_phoneme_hist):
-        plt.figure(figsize=(15, 5))
-        single_hist_len = len(list(single_hist.keys()))
-        if single_hist_len > MAX_PHONEME_PLOT:
-            plt.bar(list(single_hist.keys())[:MAX_PHONEME_PLOT], list(single_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phonemes at Threshold Value {thresh_val} for {dim}')
-        else:
-            plt.bar(list(single_hist.keys()), list(single_hist.values()), color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {single_hist_len} most Important Phonemes at Threshold Value {thresh_val} for {dim}')
-        plt.ylabel('Proportion of Important Phonemes')
-        plt.savefig(os.path.join(output_dir, f"sys_single_hist_{dim}.png"))
-        plt.clf()
-        plt.close()
+    return tick_times, tick_indices
 
-    if (double_hist is not None) and (output_double_phoneme_hist):
-        plt.figure(figsize=(15, 5))
-        double_hist_len = len(list(double_hist.keys()))
-        if double_hist_len > MAX_PHONEME_PLOT:
-            plt.bar(list(double_hist.keys())[:MAX_PHONEME_PLOT], list(double_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {dim}')
-        else:
-            plt.bar(list(double_hist.keys()), list(double_hist.values()), color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {double_hist_len} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {dim}')
-        plt.ylabel('Proportion of Important Phonemes')
-        plt.savefig(os.path.join(output_dir, f"sys_double_hist_{dim}.png"))
-        plt.clf()
-        plt.close()
-
-    return 0
 
 def plot_saliency_with_pdsm(
-        config_file, file_idx, file_path, file_segment,
+        config_file, df_row,
         spectrogram, saliency_map, fbank_length, 
-        dim, dim_phon, dim_pdsm, sq_ast_pred_i, 
+        dim_index, all_dims, dim_phon, dim_pdsm, 
         output_dir
     ):
     '''
@@ -79,29 +57,33 @@ def plot_saliency_with_pdsm(
     Parameters
     ----------
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    file_idx (int) : Original dataset index for audio file 
-    file_path (os.path) : Path to the audio file
-    file_segment (int) : Segment index of audio file
+    df_row (pandas.dataframe) : Row of data gathered by analysis
     spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
     saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
     fbank_length (int) : Time dimension of spectrogram (as max is parsed into spectrogram arg)
-    dim (str) : Dimension to show saliency for
+    dim_index (int) : Index of SQ_AST dimensions
+    all_dims (list) : SQ_AST dimensions to run
     dim_phon (list) : List of important phonemes including their start and end times
     dim_pdsm (np.array) : Mask of important phonemes
-    result_word_alignment (list) : ASR word alignment for the given audio file
-    sq_ast_pred_i (float) : The output of SQ_AST for a given dimension
     output_dir (os.path) : output directory for figure
 
     Returns
     ----------
     0 : 
     '''
+    dim = all_dims[dim_index]
+    file_path = df_row["file_path"]
+    file_segment = df_row["wav_segment"]
+    sq_ast_pred_i = df_row[f"sq_{dim}"]
+
+    tick_times, tick_indices = get_ticks(df_row, TICK_HOP, SPEC_TIME_HOP)
 
     plt.figure(figsize=(15, 10))
     plt.subplot(2, 1, 1)
     plt.imshow(spectrogram.T, aspect='auto', origin='lower', cmap='gray')
     plt.imshow(dim_pdsm, alpha=0.6, aspect='auto', origin='lower', cmap='turbo')
     plt.xlim(0, fbank_length)
+    plt.xticks(tick_indices, tick_times)
     plt.ylim(0, 128)
 
     y_offset_index = 0
@@ -114,19 +96,36 @@ def plot_saliency_with_pdsm(
     plt.ylabel("Mel Frequency Bin")
 
     plt.subplot(2, 1, 2)
-    plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
+    pos = plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
+    plt.colorbar(pos)
     plt.xlim(0, fbank_length)
+    plt.xticks(tick_indices, tick_times)
     plt.ylim(0, 128)
-    plt.title(f"Attention Rollout for {dim}")
+    plt.title(f"Important Areas for {sq_ast_dim_str[dim]}")
     plt.xlabel("Time in 10ms Frames")
     plt.ylabel("Mel Frequency Bin")
+    
+    if file_path == "":
+        str_file_path = config_file["dataset_name"]
+    else:
+        str_file_path = file_path
+
+    str_wav_segment = ""
+    if df_row["total_wav_segments"] > 1:
+        str_wav_segment = f"(segment: {file_segment}), "
 
     if config_file["pdsm"]["k_method"] == "threshold":
-        plt.suptitle(f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)")
+        plt.suptitle(
+            f"File: {str_file_path}, {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\n(With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)", 
+            fontsize=14
+        )
     elif config_file["pdsm"]["k_method"] == "percent":
-        plt.suptitle(f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} (With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)")
+        plt.suptitle(
+            f"File: {str_file_path}, {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\n(With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)", 
+            fontsize=14
+        )
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_Phoneme.png"))
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_Phoneme.png"), dpi=100)
     plt.clf()
     plt.close()
 
@@ -134,9 +133,9 @@ def plot_saliency_with_pdsm(
 
 
 def plot_saliency_jointgrid(
-        config_file, file_idx, file_path, file_segment,
+        config_file, df_row,
         spectrogram, saliency_map, kde_x_est, kde_y_est, 
-        dim, result_word_alignment, sq_ast_pred_i, 
+        dim_index, all_dims, result_word_alignment, 
         output_dir
     ):
     '''
@@ -145,34 +144,38 @@ def plot_saliency_jointgrid(
     Parameters
     ----------
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    file_idx (int) : Original dataset index for audio file 
-    file_path (os.path) : Path to the audio file
-    file_segment (int) : Segment index of audio file
+    df_row (pandas.dataframe) : Row of data gathered by analysis
     spectrogram (np.array) : SQ_AST dataset spectrogram for audio file
     saliency_map (np.array) : Extracted and scales SQ_AST saliency for audio file for given dimension
     kde_x_est (np.array) : KDE for the time dimension
     kde_y_est (np.array) : KDE for the frequency dimension
-    dim (str) : Dimension to show saliency for
+    all_dims (list) : SQ_AST dimensions to run
+    dim_phon (list) : List of important phonemes including their start and end times
     result_word_alignment (list) : ASR word alignment for the given audio file
-    sq_ast_pred_i (float) : The output of SQ_AST for a given dimension
     output_dir (os.path) : output directory for figure
 
     Returns
     ----------
     0 : 
     '''
+    dim = all_dims[dim_index]
+    file_path = df_row["file_path"]
+    file_segment = df_row["wav_segment"]
+    sq_ast_pred_i = df_row[f"sq_{dim}"]
+
+    tick_times, tick_indices = get_ticks(df_row, TICK_HOP, SPEC_TIME_HOP)
 
     h, w = saliency_map.shape
     x_flat = np.arange(w)
     y_flat = np.arange(h)
 
-    g = sns.JointGrid(height=5, ratio=5, space=0.1)
-    g.fig.set_size_inches(15, 5)
+    g = sns.JointGrid(height=4, ratio=5, space=0.1)
+    g.fig.set_size_inches(15, 7)
     g.ax_joint.imshow(spectrogram.T, aspect='auto', cmap='gray', origin='lower')
-    g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.1)
+    pos = g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.1)
     g.ax_joint.set_xticks(
-        [i/(2*0.01) for i in range(int(np.ceil(spectrogram.shape[1]/(2*0.01))))], 
-        [i/2 for i in range(int(np.ceil(spectrogram.shape[1]/(2*0.01))))]
+        tick_indices, 
+        tick_times
     )
     g.ax_joint.set_xlabel("Time in Seconds")
     g.ax_joint.set_ylabel("Mel Frequency Bins")
@@ -180,22 +183,22 @@ def plot_saliency_jointgrid(
     last_end = 0
     for word_segment in result_word_alignment:
         if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
-            if int(word_segment["start"]/0.01) != last_end:
+            if int(word_segment["start"]/SPEC_TIME_HOP) != last_end:
                 g.ax_joint.plot(
-                    [int(word_segment["start"]/0.01), int(word_segment["start"]/0.01)], 
+                    [int(word_segment["start"]/SPEC_TIME_HOP), int(word_segment["start"]/SPEC_TIME_HOP)], 
                     [0, 128], 
                     c="black", 
                     alpha=0.5
                 )
             g.ax_joint.plot(
-                [int(word_segment["end"]/0.01), int(word_segment["end"]/0.01)], 
+                [int(word_segment["end"]/SPEC_TIME_HOP), int(word_segment["end"]/SPEC_TIME_HOP)], 
                 [0, 128], 
                 c="black", 
                 alpha=0.5
             )
-            last_end = int(word_segment["end"]/0.01)
+            last_end = int(word_segment["end"]/SPEC_TIME_HOP)
             g.ax_joint.text(
-                (int(word_segment["start"]/0.01) + int(word_segment["end"]/0.01))*0.5, 
+                (int(word_segment["start"]/SPEC_TIME_HOP) + int(word_segment["end"]/SPEC_TIME_HOP))*0.5, 
                 128*0.95, 
                 word_segment["word"], 
                 fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
@@ -206,110 +209,28 @@ def plot_saliency_jointgrid(
 
     g.ax_joint.set_xlim(0, w)
     g.ax_joint.set_ylim(0, h)
+
+    if file_path == "":
+        str_file_path = config_file["dataset_name"]
+    else:
+        str_file_path = file_path
+
+    str_wav_segment = ""
+    if df_row["total_wav_segments"] > 1:
+        str_wav_segment = f"(segment: {file_segment}), "
+
+    title = ""
     if config_file["pdsm"]["k_method"] == "threshold":
-        g.fig.suptitle(
-            f"File: \'{file_path}\', SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
-            fontsize=16, y=1.03
-        )
+        title = f"File: {str_file_path}, {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\nwith KDE for Time/Freq"
     elif config_file["pdsm"]["k_method"] == "percent":
-        g.fig.suptitle(
-            f"File: \'{file_path}\' (segment: {file_segment}), SQ_AST ({dim} score): {np.round(sq_ast_pred_i, 1):.1f} with KDE for Time/Freq", 
-            fontsize=16, y=1.03
-        )
-
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_KDE_Word.png"), bbox_inches='tight')
-    plt.close()
-
-    return 0
-
-
-def plot_sys_violin_plot(
-        config_file, output_df, all_dims, output_dir
-    ):
-    '''
-    Plots a figure of the distribution of the whole dataset along all SQ_AST dimensions (with threshold)
-
-    Parameters
-    ----------
-    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    output_df (pandas.dataframe) : dataset containing the output scores from SQ_AST across all dimensions
-    all_dims (list) : SQ_AST dimensions to run
-    output_dir (os.path) : output directory for figure
-
-    Returns
-    ----------
-    0 : 
-    '''
-
-    plt.figure(figsize=(8, 8))
-
-    plot_data = [output_df[f"sq_{dim}"] for dim in all_dims]
-
-    parts = plt.violinplot(plot_data, positions=range(len(all_dims)), 
-                        showmeans=True, showmedians=False, showextrema=True)
-
-    for pc in parts['bodies']:
-        pc.set_facecolor('blue')
-        pc.set_edgecolor('black')
-        pc.set_alpha(0.3)
-
-    plt.axhline(y=config_file["score_threshold"], color="red", 
-                linestyle="--", alpha=0.5, label="Threshold")
+        title = f"File: {str_file_path} {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\nwith KDE for Time/Freq"
     
-    plt.xticks(range(len(all_dims)), labels=all_dims)
-    plt.xlabel("Sound Quality Output Categories")
-    plt.ylabel("Score (1-5)")
-    plt.xlim(-0.5, len(all_dims) - 0.5)
-    plt.ylim(0, 5.5)
-    plt.title(f"Violin Plot for SQ_AST Outputs Categories Over {config_file['dataset_name']} Dataset")
-    plt.legend()
+    g.fig.suptitle(
+        title, 
+        fontsize=14, y=1.03
+    )
 
-    plt.savefig(os.path.join(output_dir, "sq_ast_violin.png"))
-    plt.clf()
-    plt.close()
-
-    return 0
-
-
-def plot_sys_asr_conf_violin_plot(
-        config_file, output_df, output_dir
-    ):
-    '''
-    Plots a violin plot of the distribution of the mean and median asr confidence per segment
-
-    Parameters
-    ----------
-    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    output_df (pandas.dataframe) : thresholded dataset containing the asr confidence scores
-    output_dir (os.path) : output directory for figure
-
-    Returns
-    ----------
-    0 : 
-    '''
-
-    plt.figure(figsize=(6, 8))
-
-    plot_data = [output_df[f"mean_asr_conf"], output_df[f"median_asr_conf"]]
-
-    parts = plt.violinplot(plot_data, positions=range(2), 
-                        showmeans=True, showmedians=False, showextrema=True)
-
-    for pc in parts['bodies']:
-        pc.set_facecolor('blue')
-        pc.set_edgecolor('black')
-        pc.set_alpha(0.3)
-    
-    plt.xticks(range(2), labels=["Segment Mean", "Segment Median"])
-    plt.xlabel("ASR Average Type")
-    plt.ylabel("Confidence")
-    plt.xlim(-0.5, 2 - 0.5)
-    plt.ylim(0, 1.0)
-    plt.yticks([0.1*i for i in range(11)], [str(10*i)+"%" for i in range(11)])
-    plt.title(f"Violin Plot for Average ASR Confidence per\nSegment Over {config_file['dataset_name']} Dataset Under Threshold")
-    plt.legend()
-
-    plt.savefig(os.path.join(output_dir, "asr_conf_violin.png"))
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_KDE_Word.png"), dpi=100, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -317,10 +238,9 @@ def plot_sys_asr_conf_violin_plot(
 
 
 def plot_kde_along_waveform(
-        config_file, file_idx, wav_path, file_segment, channel, segment_info, 
+        config_file, df_row,
         time_kdes, result_word_alignment, 
-        all_dims, sq_ast_scores,
-        output_dir, 
+        all_dims, output_dir, 
     ):
     '''
     Plots a figure of ASR Word Confidence over a single audio file
@@ -328,11 +248,7 @@ def plot_kde_along_waveform(
     Parameters
     ----------
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    file_idx (int) : Original dataset index of the wav file
-    wav_path (os.path) : Path to the wav file
-    file_segment (int) : Segment index of audio file
-    channel (int) : channel of wavfile to read
-    segment_info (tuple) : start and end samples of segment
+    df_row (pandas.dataframe) : Row of data gathered by analysis
     time_kdes (numpy.array) : Kernel density estimation over time for a single audio file
     result_word_alignment (list) : ASR word alignment for the given audio file
     all_dims (list) : SQ_AST dimensions to run
@@ -343,16 +259,23 @@ def plot_kde_along_waveform(
     ----------
     0 : 
     '''
+    file_path = df_row["file_path"]
+    file_segment = df_row["wav_segment"]
+    channel = df_row["wav_channel"]
+    file_wav_segment_info = (df_row["wav_start"], df_row["wav_end"])
+    sq_ast_scores = [float(df_row[f"sq_{dim}"]) for dim in all_dims]
+
+    tick_times, tick_indices = get_ticks(df_row, TICK_HOP, 1.0/df_row["file_fs"])
 
     input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
-    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, wav_path))
+    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, file_path))
     # get channel of waveform
     if audio_test.shape[0] > 1:
         audio_test = audio_test[channel, :]
     else:
         audio_test = audio_test.squeeze()
     # get segment of waveform
-    audio_test = audio_test[segment_info[0]:segment_info[1]].numpy()
+    audio_test = audio_test[file_wav_segment_info[0]:file_wav_segment_info[1]].numpy()
 
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
@@ -366,7 +289,7 @@ def plot_kde_along_waveform(
                 time_kdes[dim_index]
             )
             time_kde_rescaled = time_kde_rescaled/np.max(time_kde_rescaled)
-            axs[0].plot(time_kde_rescaled, label=dim)
+            axs[0].plot(time_kde_rescaled, label=sq_ast_dim_str[dim])
     
     axs[0].set_xlim(0, len(time_kde_rescaled))
     axs[0].set_xticks([0], [None])
@@ -425,22 +348,32 @@ def plot_kde_along_waveform(
 
     axs[1].set_ylim(-1, 1)
     axs[1].set_xlim(0, len(audio_test))
-    axs[1].set_xticks([i*fs_test/2 for i in range(int(len(audio_test)*2/fs_test))], [i/2 for i in range(int(len(audio_test)*2/fs_test))])
+    axs[1].set_xticks(tick_indices, tick_times)
     axs[1].set_xlabel("Time in seconds")
     axs[1].set_ylabel("Amplitude")
     axs[1].set_yticks([0], [None])
 
-    plt.suptitle(f"File: {wav_path}, Importance over Time For Sound Quality Metrics")
+    if file_path == "":
+        str_file_path = config_file["dataset_name"]
+    else:
+        str_file_path = file_path
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_KDE_Time_Word.png"), bbox_inches='tight')
+    str_wav_segment = ""
+    if df_row["total_wav_segments"] > 1:
+        str_wav_segment = f"(segment: {file_segment}), "
+
+    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}Importance over Time\nFor Sound Quality Metrics")
+
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_KDE_Time_Word.png"), dpi=100)
+    plt.clf()
     plt.close()
 
     return 0
 
 
 def plot_asr_confidence_along_waveform(
-        config_file, wav_path, file_segment, channel, segment_info, file_idx,
-        result_word_alignment, output_dir
+        config_file, df_row, result_word_alignment, 
+        output_dir
     ):
     '''
     Plots a figure of ASR Word Confidence over a single audio file
@@ -448,7 +381,7 @@ def plot_asr_confidence_along_waveform(
     Parameters
     ----------
     config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    wav_path (os.path) : Path to the wav file
+    file_path (os.path) : Path to the wav file
     file_segment (int) : Segment index of audio file
     channel (int) : channel of wavfile to read
     segment_info (tuple) : start and end samples of segment
@@ -460,16 +393,22 @@ def plot_asr_confidence_along_waveform(
     ----------
     0 : 
     '''
+    file_path = df_row["file_path"]
+    file_segment = df_row["wav_segment"]
+    channel = df_row["wav_channel"]
+    file_wav_segment_info = (df_row["wav_start"], df_row["wav_end"])
+
+    tick_times, tick_indices = get_ticks(df_row, TICK_HOP, 1.0/df_row["file_fs"])
 
     input_dir = os.path.join(config_file["path"], config_file["dataset_name"])
-    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, wav_path))
+    audio_test, fs_test = torchaudio.load(os.path.join(input_dir, file_path))
     # get channel of waveform
     if audio_test.shape[0] > 1:
         audio_test = audio_test[channel, :]
     else:
         audio_test = audio_test.squeeze()
     # get segment of waveform
-    audio_test = audio_test[segment_info[0]:segment_info[1]].numpy()
+    audio_test = audio_test[file_wav_segment_info[0]:file_wav_segment_info[1]].numpy()
     audio_test = (audio_test.astype(np.float32))/np.max(np.abs(audio_test))
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [0.3, 1]}, figsize=(15, 5))
     
@@ -533,54 +472,25 @@ def plot_asr_confidence_along_waveform(
 
     axs[1].set_ylim(-1, 1)
     axs[1].set_xlim(0, len(audio_test))
-    axs[1].set_xticks([i*fs_test/2 for i in range(int(len(audio_test)*2/fs_test))], [i/2 for i in range(int(len(audio_test)*2/fs_test))])
+    axs[1].set_xticks(tick_indices, tick_times)
     axs[1].set_xlabel("Time in seconds")
     axs[1].set_ylabel("Amplitude")
     axs[1].set_yticks([0], [None])
 
-    plt.suptitle(f"{config_file["dataset_name"]}, File: {wav_path}, ASR Confidence For Each Word")
+    if file_path == "":
+        str_file_path = config_file["dataset_name"]
+    else:
+        str_file_path = file_path
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_ASR_Confidence.png"), bbox_inches='tight')
+    str_wav_segment = ""
+    if df_row["total_wav_segments"] > 1:
+        str_wav_segment = f"(segment: {file_segment}), "
+
+    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}\nASR Confidence For Each Word", fontsize=14)
+
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_ASR_Confidence.png"), dpi=100)
+    plt.clf()
     plt.close()
-
-    return 0
-
-
-def plot_kde_for_freq_sys(
-        config_file, kde_freq, all_dims, 
-        output_dir
-    ):
-    '''
-    Plots a figure of Frequency Kernel Density Estimation over the entire system under threshold
-
-    Parameters
-    ----------
-    config_file (dict) : Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
-    kde_freq (numpy.array) : Kernel Density Estimation for mel-frequency bins across all dimensions
-    all_dims (list) : SQ_AST dimensions to run
-    output_dir (os.path) : output directory for figure
-
-    Returns
-    ----------
-    0 : 
-    '''
-    
-    if np.any(kde_freq):
-        plt.figure(figsize=(10, 5))
-        max_val = 0
-        for dim_index in range(len(all_dims)):
-            temp_agg = np.sum(kde_freq[:, dim_index, :], axis=0)
-            if np.any(temp_agg):
-                temp_agg = temp_agg/np.sum(temp_agg)
-                if np.max(temp_agg) > max_val:
-                    max_val = np.max(temp_agg)
-                plt.plot(temp_agg, label=all_dims[dim_index])
-        plt.legend()
-        plt.xlabel("Mel Frequency Bin")
-        plt.xlim(0, 128)
-        plt.ylim(0, max_val*1.05)
-        plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System")
-        plt.savefig(os.path.join(output_dir, f"Frequency_KDE_For_Dims.png"))
 
     return 0
 

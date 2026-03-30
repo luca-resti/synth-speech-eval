@@ -37,7 +37,6 @@ import numpy as np
 hf_logging.set_verbosity_error()  # Silence unnecessary warnings from huggingface
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-
 ALL_DIMS = ["mos", "noi", "dis", "col", "loud"]
 COL_IDX = {d: i for i, d in enumerate(ALL_DIMS)}
 SALIENCY_INTERP_SIZE = (128, 1024)

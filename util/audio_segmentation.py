@@ -81,7 +81,7 @@ def get_input_dataset(config_file):
                         for i_seg in range(n_segs):
                             input_df.loc[added_files] = [
                                 db_name, file_index, file_path, sample_rate,
-                                int(audio.shape[0]), int(channel), int(n_segs), int(i_seg),
+                                int(audio.shape[0]), int(channel), int(n_segs), int(i_seg)+1,
                                 int(sg_info[i_seg][0]), int(sg_info[i_seg][1])
                             ]
                             added_files += 1
