@@ -61,25 +61,28 @@ def run_eval(config_file):
     output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
     output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
 
+    # Validate dims
+    config_file["sq_ast_dims"] = sq_ast_mod.sq_ast_validate_dims(config_file["sq_ast_dims"])
+
     # unpack sq_ast outputs
     sq_ast_ds, sq_ast_pred, saliency_maps, fbank_lengths, output_ind_df = sq_ast_mod.sq_ast_fw(config_file, input_df)
 
     # plot system violin plots
     if config_file["plots"]["output_sys_violin"]:
         plot_helper_sys.plot_sys_violin_plot(
-            config_file, output_ind_df, sq_ast_mod.ALL_DIMS, 
+            config_file, output_ind_df, config_file["sq_ast_dims"], 
             output_sysfig_dir
         )
 
     # plot system bar chart
     if config_file["plots"]["ouput_sys_bar"]:
         plot_helper_sys.plot_sys_bar_chart(
-            config_file, output_ind_df, sq_ast_mod.ALL_DIMS, 
+            config_file, output_ind_df, config_file["sq_ast_dims"], 
             output_sysfig_dir
         )
 
     # threshold dataframe
-    output_ind_df_thresh = sq_ast_mod.get_thresholded_df(output_ind_df, config_file["score_threshold"])
+    output_ind_df_thresh = sq_ast_mod.get_thresholded_df(config_file, output_ind_df)
 
     # make output directories
     for index, df_row in output_ind_df_thresh.iterrows():
@@ -120,8 +123,8 @@ def run_eval(config_file):
         pdsm_info = pdsm.PDSM_INFO
 
         # get kernel density estimate for both time and frequency domain
-        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), int(sq_ast_mod.SALIENCY_INTERP_SIZE[1])), dtype=np.float32)
-        kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(sq_ast_mod.ALL_DIMS), sq_ast_mod.SQ_MEL_FREQ), dtype=np.float32)
+        kde_x_info = np.zeros(shape=(len(output_ind_df_thresh), len(config_file["sq_ast_dims"]), int(sq_ast_mod.SALIENCY_INTERP_SIZE[1])), dtype=np.float32)
+        kde_y_info = np.zeros(shape=(len(output_ind_df_thresh), len(config_file["sq_ast_dims"]), sq_ast_mod.SQ_MEL_FREQ), dtype=np.float32)
 
         # gather information on each thresholded audio file
         for file_idx, df_row in output_ind_df_thresh.iterrows():
@@ -136,8 +139,8 @@ def run_eval(config_file):
 
             ppgs_pred_file = ppgs_pred[file_idx, 0, :, :fbank_lengths[file_idx][1]]
 
-            for dim_index in range(len(sq_ast_mod.ALL_DIMS)):
-                dim = sq_ast_mod.ALL_DIMS[dim_index]
+            for dim_index in range(len(config_file["sq_ast_dims"])):
+                dim = config_file["sq_ast_dims"][dim_index]
 
                 if sq_ast_pred[file_idx, dim_index] <= config_file["score_threshold"]:
 
@@ -183,7 +186,7 @@ def run_eval(config_file):
                             plot_helper_ind.plot_saliency_with_pdsm(
                                 config_file, df_row,
                                 mel_spec, saliency_rescaled, fbank_lengths[file_idx][1], 
-                                dim_index, sq_ast_mod.ALL_DIMS, dim_phon, dim_pdsm, 
+                                dim_index, config_file["sq_ast_dims"], dim_phon, dim_pdsm, 
                                 individual_base_folder
                             )
 
@@ -192,7 +195,7 @@ def run_eval(config_file):
                             plot_helper_ind.plot_saliency_jointgrid(
                                 config_file, df_row,
                                 mel_spec, saliency_rescaled, kde_x_info[file_idx, dim_index, :len(kde_x)], kde_y_info[file_idx, dim_index, :], 
-                                dim_index, sq_ast_mod.ALL_DIMS, word_alignments[file_idx],
+                                dim_index, config_file["sq_ast_dims"], word_alignments[file_idx],
                                 individual_base_folder
                             )
 
@@ -205,7 +208,7 @@ def run_eval(config_file):
                 plot_helper_ind.plot_kde_along_waveform(
                     config_file, df_row,
                     kde_x_info[file_idx, :, :fbank_lengths[file_idx][1]], word_alignments[file_idx], 
-                    sq_ast_mod.ALL_DIMS, individual_base_folder
+                    config_file["sq_ast_dims"], individual_base_folder
                 )
 
             # save asr confidence for each word in transcription
@@ -218,13 +221,13 @@ def run_eval(config_file):
         # save system level frequency kde
         if (config_file["plots"]["output_freq_kde"]):
             plot_helper_sys.plot_kde_for_freq_sys(
-                config_file, kde_y_info, sq_ast_mod.ALL_DIMS,
+                config_file, kde_y_info, config_file["sq_ast_dims"],
                 output_sysfig_dir
             )
 
         print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_start_time}")
 
-        for dim in sq_ast_mod.ALL_DIMS:
+        for dim in config_file["sq_ast_dims"]:
 
             # Save most important phonemes
             output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]

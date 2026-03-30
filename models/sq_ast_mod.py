@@ -37,8 +37,8 @@ import numpy as np
 hf_logging.set_verbosity_error()  # Silence unnecessary warnings from huggingface
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-ALL_DIMS = ["mos", "noi", "dis", "col", "loud"]
-COL_IDX = {d: i for i, d in enumerate(ALL_DIMS)}
+REF_ALL_DIMS = ["mos", "noi", "dis", "col", "loud"]
+# COL_IDX = {d: i for i, d in enumerate(ALL_DIMS)}
 SALIENCY_INTERP_SIZE = (128, 1024)
 
 MAX_AUDIO_LEN = 10
@@ -355,6 +355,28 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
     return predictions, saliency
 
 
+def sq_ast_validate_dims(sq_ast_dims):
+    """
+    Filters all dims given in config file, and returns a filtered list to stop any further errors
+
+    Parameters
+    ----------
+    sq_ast_dims (list) : List of SQ_AST dimensions given in the config file
+
+    Returns
+    ----------
+    refined_dims (list) : A refined list allowing only dimension that are valid
+    """
+
+    refined_dims = []
+    for dim in sq_ast_dims:
+        if dim in REF_ALL_DIMS:
+            refined_dims.append(dim)
+    if len(refined_dims) == 0:
+        raise ValueError(f"Has to give at least one valid sq_ast dimension in config file: {REF_ALL_DIMS}")
+    return refined_dims
+
+
 def sq_ast_fw(config_file, input_df):
     """
     Completes the SQ_AST forward pass for whole dataset and gathers saliency map below threshold defined in config_file
@@ -374,7 +396,7 @@ def sq_ast_fw(config_file, input_df):
     """
 
     current_time = datetime.now()
-    dims = ALL_DIMS
+    dims = config_file["sq_ast_dims"]
     bs = int(config_file["sq_ast"]["batch_size"])
     num_workers = int(0)
 
@@ -402,11 +424,9 @@ def sq_ast_fw(config_file, input_df):
 
     # develop dataframe
     output_ind_df = input_df
-    input_df["sq_mos"] = predictions.cpu().numpy()[:, 0]
-    input_df["sq_noi"] = predictions.cpu().numpy()[:, 1]
-    input_df["sq_dis"] = predictions.cpu().numpy()[:, 2]
-    input_df["sq_col"] = predictions.cpu().numpy()[:, 3]
-    input_df["sq_loud"] = predictions.cpu().numpy()[:, 4]
+
+    for index, dim in enumerate(dims):
+        input_df[f"sq_{dim}"] = predictions.cpu().numpy()[:, index]
 
     predictions = predictions.cpu().numpy()
     saliency_map = saliency_map.cpu().numpy()
@@ -416,29 +436,29 @@ def sq_ast_fw(config_file, input_df):
     )
 
 
-def get_thresholded_df(input_df, score_threshold):
+def get_thresholded_df(config_file, input_df):
     """
     Gets the filtered Dataframe with a given score threshold
     Returns the dataframe with all data lying below this threshold
 
     Parameters
     ----------
+    config_file (dict) :  Config file read in by yaml, see ./configs/default.yaml for a more in-depth understanding
     input_df (pandas.dataframe) : Dataframe of SQ_AST outputs
-    score_threshold (float) : User defined threshold to get all below
     
     Returns
     ----------
     output_df_thresh (pandas.dataframe) : Thresholded dataframe
 
     """
+
+    score_threshold = config_file["score_threshold"]
+    dims = config_file["sq_ast_dims"]
+
     # get thresholded dataframe under the score threshold
-    output_df_thresh = input_df[
-        (input_df["sq_mos"] <= score_threshold) |
-        (input_df["sq_noi"] <= score_threshold) |
-        (input_df["sq_dis"] <= score_threshold) |
-        (input_df["sq_col"] <= score_threshold) |
-        (input_df["sq_loud"] <= score_threshold)
-    ]
+    cols = [f"sq_{d}" for d in dims]
+    output_df_thresh = input_df[(input_df[cols] <= score_threshold).any(axis=1)]
+    
     output_df_thresh["index"] = np.arange(len(output_df_thresh))
     output_df_thresh = output_df_thresh.reset_index(names=["pre_threshold_index"])
     return output_df_thresh

@@ -5,6 +5,8 @@ language: en
 
 score_threshold : 3
 
+sq_ast_dims : ["mos", "noi", "dis", "col", "loud"]
+
 saliency :
   saliency_method : "Flow"
   saliency_interp_method : nearest
