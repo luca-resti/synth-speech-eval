@@ -7,12 +7,15 @@ from datetime import datetime
 from models import sq_ast_mod
 import torchaudio
 
+import logging
+logger = logging.getLogger()
+
 # Set for espeak requirement (default location)
 if os.environ.get('OS','') == 'Windows_NT':
-    print(f" === WINDOWS === ")
+    logger.info(f" === WINDOWS === ")
     os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "C:/Program Files/eSpeak NG/libespeak-ng.dll" 
 else:
-    print(f" === LINUX === ")
+    logger.info(f" === LINUX === ")
     os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1" 
     os.environ['PHONEMIZER_ESPEAK_PATH'] = "/usr/bin/espeak-ng"
 
@@ -96,8 +99,8 @@ def whisperx_get_ppgs(input_df, config_file):
     sil_idx = vocab["</s>"]
 
     preproc_time = datetime.now()
-    print(f"WhisperX Preprocessing completed in time: {preproc_time - current_time}")
-    print(f"Running WhisperX Inference on {len(input_df)} audio files.")
+    logger.info(f"WhisperX Preprocessing completed in time: {preproc_time - current_time}")
+    logger.info(f"Running WhisperX Inference on {len(input_df)} audio files.")
 
     audio = batch_audio[0, :]
     result = model.transcribe(audio, batch_size=int(config_file["whisperx"]["batch_size"]), chunk_size=2) # chunk size determined to recover silences
@@ -152,8 +155,8 @@ def whisperx_get_ppgs(input_df, config_file):
     for phoneme in phoneme_to_idx.keys():
         phoneme_dict_out[str(phoneme_to_idx[phoneme])] = phoneme
 
-    print(f"WhisperX Transcription and Phonemization completed in time: {datetime.now() - preproc_time}")
-    print(f"WhisperX Overall Usage completed in time: {datetime.now() - current_time}")
+    logger.info(f"WhisperX Transcription and Phonemization completed in time: {datetime.now() - preproc_time}")
+    logger.info(f"WhisperX Overall Usage completed in time: {datetime.now() - current_time}")
 
     return (
         ppgs_out[:, :, :, 1:-1], # remove padding

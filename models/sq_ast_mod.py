@@ -33,9 +33,13 @@ from torch.utils.data import Dataset, DataLoader
 from datetime import datetime
 from transformers import ASTConfig, ASTModel, ASTFeatureExtractor, logging as hf_logging
 import numpy as np
+import logging
+logger = logging.getLogger(__name__)
+
 
 hf_logging.set_verbosity_error()  # Silence unnecessary warnings from huggingface
 torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 REF_ALL_DIMS = ["mos", "noi", "dis", "col", "loud"]
 # COL_IDX = {d: i for i, d in enumerate(ALL_DIMS)}
@@ -181,7 +185,7 @@ def prepare_dataloader(input_dir, input_df, bs, num_workers):
         audio, sample_rate = torchaudio.load(os.path.join(input_dir, row["file_path"]))
         fbank_lengths[index] = [index, get_expected_fbank_shape(audio[:, row["wav_start"]:row["wav_end"]], sample_rate)[1]]
 
-    print(f"Running SQ_AST Inference on {len(input_df)} audio files.")
+    logger.info(f"Running SQ_AST Inference on {len(input_df)} audio files.")
 
     ds = ASTVal(input_df, input_dir, DB_MEAN, DB_STD)
     dl = DataLoader(dataset=ds, batch_size=bs, shuffle=False, num_workers=num_workers)
@@ -255,6 +259,30 @@ def tensor_grad_cam(activations, gradients):
     return cam
 
 
+LOG_PERCENTAGES = 20
+
+def print_log_progress(current, total, last_logged, text):
+    '''
+    Prints the percentage in 20% chunks to stop clogging of sq_ast logs
+
+    Parameters
+    ----------
+    current (int) : current batch number
+    total (int) : total number of batches
+    last_logged (int) : last logged percentage (stop repeats)
+    text (str) : text to prepend the percentage
+
+    Returns
+    ----------
+    last_logged (int) : Number updated if logged
+    '''
+    percent = 100*(current/total)
+    if percent >= last_logged + LOG_PERCENTAGES:
+        last_logged = percent
+        logger.info(f"{text}: {int(percent)}%")
+    return last_logged
+
+
 def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
     """
     Evaluates the SQ_AST outputs for given input and dimensions, and returns the attention flow
@@ -290,8 +318,9 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
                     model.to(device)
                     model.eval()
 
+                    last_logged = 0
                     for batch_index, (index, batch_features) in enumerate(dl):
-                        print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
+                        last_logged = print_log_progress(batch_index, dl.__len__(), last_logged, dim)
                         batch_features = batch_features.float().to(device)
                         pred, attentions = model(batch_features, output_attentions=True)
                         attentions = attentions.cpu().detach()
@@ -306,7 +335,7 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
                                 if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
                                     attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
                                     saliency[i, dim_index, :, :] = attention_flow.reshape(12, 101)
-                    print("\n\r", end="")
+                    logger.info(f"{dim}: 100%")
 
         elif method == "GradCAM":
             model = ASTXL()
@@ -327,8 +356,9 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
             forward_handle = target_layer.register_forward_hook(save_activation)
             backward_handle = target_layer.register_full_backward_hook(save_gradient)
 
+            last_logged = 0
             for batch_index, (index, batch_features) in enumerate(dl):
-                print(f"\r- {dim}: {int(100*(batch_index+1)/dl.__len__())}%   ", end="\r") #extra padding to flush rewrite
+                last_logged = print_log_progress(batch_index, dl.__len__(), last_logged, dim)
                 batch_features = batch_features.float().to(device)
                 batch_features.requires_grad = True 
                 pred_sal = model(batch_features, output_attentions=False)
@@ -341,9 +371,8 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
                     pred_sal.backward()
                     grad_cam_saliency = tensor_grad_cam(activations, gradients).cpu().detach()
                     saliency[index, dim_index, :, :] = grad_cam_saliency.reshape(12, 101)
+            logger.info(f"{dim}: 100%")
 
-            print("\n\r", end="")
-            
             # free handle memory
             forward_handle.remove()
             backward_handle.remove()
@@ -405,7 +434,7 @@ def sq_ast_fw(config_file, input_df):
     # get device from config and check if GPU is available
     device = config_file["device"]
 
-    print(f"Starting SQ_AST Preprocessing")
+    logger.info(f"Starting SQ_AST Preprocessing")
 
     if bs > len(input_df):
         bs = int(len(input_df))
@@ -420,7 +449,7 @@ def sq_ast_fw(config_file, input_df):
     # get the predictions and attention flows for each dimension
     predictions, saliency_map = get_pred_attn(config_file["saliency"]["saliency_method"], dims, dl, device, bs, config_file["score_threshold"], len(input_df))
 
-    print(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
+    logger.info(f"SQ_AST inference completed in time: {datetime.now() - current_time}")
 
     # develop dataframe
     output_ind_df = input_df

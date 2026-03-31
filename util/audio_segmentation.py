@@ -2,6 +2,8 @@ import pandas as pd
 import os
 import torchaudio
 import numpy as np
+import logging
+logger = logging.getLogger()
 
 
 MIN_AUDIO_LEN = 2.0
@@ -94,10 +96,10 @@ def get_input_dataset(config_file):
                         ]
                         added_files += 1
                 else:
-                    print(f"{file_path}: channel: {channel} is empty, skipping channel")
+                    logger.info(f"{file_path}: channel: {channel} is empty, skipping channel")
         
         else:
-            print(f"{file_path} is not above minimum length: {MIN_AUDIO_LEN} seconds")
+            logger.info(f"{file_path} is not above minimum length: {MIN_AUDIO_LEN} seconds")
 
     return input_df
 

@@ -1,3 +1,16 @@
+import logging
+import sys
+
+# set logging info
+LOGGING_LEVEL = logging.DEBUG
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s | %(message)s')
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.setLevel(LOGGING_LEVEL)
+stdout_handler.setFormatter(formatter)
+logger.addHandler(stdout_handler)
+
 from models import sq_ast_mod
 from models import ppgs_wrapper
 from models import pdsm
@@ -5,7 +18,6 @@ from util import kde_tools, config_util, audio_segmentation, plot_helper_ind, pl
 
 import threading
 import torch
-import sys
 import os
 import yaml
 import numpy as np
@@ -15,8 +27,6 @@ warnings.filterwarnings("ignore")
 
 sys.setrecursionlimit(10**9)
 threading.stack_size(10**8)
-
-import pandas as pd
 
 def run_eval(config_file):
     '''
@@ -33,12 +43,6 @@ def run_eval(config_file):
     0 : 
     '''
     start_time = datetime.now()
-
-    input_df = audio_segmentation.get_input_dataset(config_file)
-
-    if len(input_df) == 0:
-        print("Input Dataset has no valid audio files")
-        exit()
 
     # create output directories
     output_dir = ""
@@ -63,6 +67,26 @@ def run_eval(config_file):
     output_dir_csv_sorted = os.path.join(output_dir, "sorted_csvs/")
     if not os.path.exists(output_dir_csv_sorted):
         os.makedirs(output_dir_csv_sorted)
+
+    file_handler = logging.FileHandler(output_dir + '/logs.log')
+    file_handler.setLevel(LOGGING_LEVEL)
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+
+    # get gpu availability
+    if torch.cuda.is_available():
+        logger.info(f" === USING GPU === ")
+        config_file["device"] = "cuda"
+    else:
+        logger.info(f" === USING CPU === ")
+        config_file["device"] = "cpu"
+
+    input_df = audio_segmentation.get_input_dataset(config_file)
+
+    if len(input_df) == 0:
+        logger.info("Input Dataset has no valid audio files")
+        exit()
 
     # Validate dims
     config_file["sq_ast_dims"] = sq_ast_mod.sq_ast_validate_dims(config_file["sq_ast_dims"])
@@ -250,7 +274,7 @@ def run_eval(config_file):
                 output_sysfig_dir
             )
 
-        print(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_start_time}")
+        logger.info(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_start_time}")
 
         for dim in config_file["sq_ast_dims"]:
 
@@ -277,7 +301,7 @@ def run_eval(config_file):
     with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
         yaml.dump(config_file, outfile)
 
-    print(f"Completed analysis in {str((datetime.now() - start_time))}")
+    logger.info(f"Completed analysis in {str((datetime.now() - start_time))}")
 
     return 0
 
@@ -298,14 +322,6 @@ if __name__ == "__main__":
         with open(config_path_alt, 'r') as f:
             config_file_alt = yaml.safe_load(f)
         config_file = config_util.deep_merge(config_file, config_file_alt)
-
-    # get gpu availability
-    if torch.cuda.is_available():
-        print(f" === USING GPU === ")
-        config_file["device"] = "cuda"
-    else:
-        print(f" === USING CPU === ")
-        config_file["device"] = "cpu"
 
     run_eval(config_file)
 
