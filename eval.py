@@ -2,14 +2,10 @@ import logging
 import sys
 
 # set logging info
-LOGGING_LEVEL = logging.DEBUG
+LOGGING_LEVEL = logging.INFO
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s | %(message)s')
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(LOGGING_LEVEL)
-stdout_handler.setFormatter(formatter)
-logger.addHandler(stdout_handler)
+# get rid of matplotlib warnings
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 from models import sq_ast_mod
 from models import ppgs_wrapper
@@ -42,7 +38,14 @@ def run_eval(config_file):
     ----------
     0 : 
     '''
-    start_time = datetime.now()
+    start_time = config_file["datetime"]
+
+    logger.setLevel(LOGGING_LEVEL)
+    formatter = logging.Formatter('%(asctime)s | %(message)s')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(LOGGING_LEVEL)
+    stdout_handler.setFormatter(formatter)
+    logger.addHandler(stdout_handler)
 
     # create output directories
     output_dir = ""
@@ -101,51 +104,52 @@ def run_eval(config_file):
             output_sysfig_dir
         )
 
-    # plot system bar chart
-    if config_file["plots"]["output_sys_bar"]:
-        plot_helper_sys.plot_sys_bar_chart(
-            config_file, output_ind_df, config_file["sq_ast_dims"], 
+    # plot system pair plots
+    if config_file["plots"]["output_sys_corr"]:
+        plot_helper_sys.plot_metric_corr_plot(
+            config_file, output_ind_df, config_file["sq_ast_dims"], False,
             output_sysfig_dir
         )
 
     # threshold dataframe
     output_ind_df_thresh = sq_ast_mod.get_thresholded_df(config_file, output_ind_df)
 
-    # plot system pair plots
-    if config_file["plots"]["output_sys_bar"]:
-        plot_helper_sys.plot_metric_corr_plot(
-            config_file, output_ind_df, config_file["sq_ast_dims"], False,
-            output_sysfig_dir
-        )
-        plot_helper_sys.plot_metric_corr_plot(
-            config_file, output_ind_df_thresh, config_file["sq_ast_dims"], True,
-            output_sysfig_dir
-        )
-
-    if config_file["plots"]["output_sys_wav_chan"]:
-        plot_helper_sys.plot_sys_chan_bar_chart(
-            config_file, output_ind_df_thresh, int(np.max(output_ind_df["total_wav_channels"])), 
-            output_sysfig_dir
-        )
-
-    # make output directories
-    for index, df_row in output_ind_df_thresh.iterrows():
-        individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" #remove ".wav"
-        if not os.path.exists(individual_dir):
-            os.makedirs(individual_dir)
-        if df_row["total_wav_channels"] > 1:
-            individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" + "ch" + str(df_row["wav_channel"]) + "/"
-            if not os.path.exists(individual_dir):
-                os.makedirs(individual_dir)
-
-    for dim in config_file["sq_ast_dims"]:
-        output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
-        if len(output_ind_df_thresh_for_row) > 0:
-            output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
-            output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_csv_sorted, f"thredholded_sorted_sq_{dim}.csv"), index=False, sep="\t")
-
     # only run analysis if the thresholded dataframe is non empty
     if len(output_ind_df_thresh) > 0:
+        # plot system bar chart
+        if config_file["plots"]["output_sys_bar"]:
+            plot_helper_sys.plot_sys_bar_chart(
+                config_file, output_ind_df, config_file["sq_ast_dims"], 
+                output_sysfig_dir
+            )
+
+        if config_file["plots"]["output_sys_corr"]:
+            plot_helper_sys.plot_metric_corr_plot(
+                config_file, output_ind_df_thresh, config_file["sq_ast_dims"], True,
+                output_sysfig_dir
+            )
+
+        if config_file["plots"]["output_sys_wav_chan"]:
+            plot_helper_sys.plot_sys_chan_bar_chart(
+                config_file, output_ind_df_thresh, int(np.max(output_ind_df["total_wav_channels"])), 
+                output_sysfig_dir
+            )
+
+        # make output directories
+        for index, df_row in output_ind_df_thresh.iterrows():
+            individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" #remove ".wav"
+            if not os.path.exists(individual_dir):
+                os.makedirs(individual_dir)
+            if df_row["total_wav_channels"] > 1:
+                individual_dir = output_individual_dir + os.path.basename(df_row["file_path"])[:-4] + "/" + "ch" + str(df_row["wav_channel"]) + "/"
+                if not os.path.exists(individual_dir):
+                    os.makedirs(individual_dir)
+
+        for dim in config_file["sq_ast_dims"]:
+            output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
+            if len(output_ind_df_thresh_for_row) > 0:
+                output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
+                output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_csv_sorted, f"thredholded_sorted_sq_{dim}.csv"), index=False, sep="\t")
 
         # remove saliency, fbank lengths and sq_ast_pred rows not in thresholded dataframe
         fbank_lengths = fbank_lengths[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
@@ -303,6 +307,10 @@ def run_eval(config_file):
 
     logger.info(f"Completed analysis in {str((datetime.now() - start_time))}")
 
+    # remove loggers
+    logger.removeHandler(stdout_handler)
+    logger.removeHandler(file_handler)
+
     return 0
 
 
@@ -322,6 +330,8 @@ if __name__ == "__main__":
         with open(config_path_alt, 'r') as f:
             config_file_alt = yaml.safe_load(f)
         config_file = config_util.deep_merge(config_file, config_file_alt)
+
+    config_file["datetime"] = datetime.now()
 
     run_eval(config_file)
 
