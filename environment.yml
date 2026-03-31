@@ -8,4 +8,3 @@ channels:
 dependencies:
   - python==3.12
   - ffmpeg[version='>=6.0,<7.0']
-  - cuda-toolkit

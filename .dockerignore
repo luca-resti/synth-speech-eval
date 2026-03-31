@@ -210,3 +210,6 @@ __marimo__/
 .gitignore
 .vs_code/
 .git/
+
+inputs/
+outputs/

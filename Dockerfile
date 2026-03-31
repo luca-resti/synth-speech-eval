@@ -23,11 +23,13 @@ RUN conda env create -f environment.yml -v && \
     conda clean -afy
 
 # Runtime
-FROM nvidia/cuda:12.6.2-base-ubuntu24.04
+FROM nvidia/cuda:12.6.2-runtime-ubuntu24.04
 
 ENV PATH="/opt/conda/bin:${PATH}"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONIOENCODING=utf-8
 
 COPY --from=builder /opt/conda /opt/conda
 
@@ -39,6 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . .
 
+EXPOSE 8501
+
 # Ensure the shell uses the conda environment
 SHELL ["conda", "run", "-n", "synth-speech-eval", "/bin/bash", "-c"]
-CMD ["conda", "run", "-n", "synth-speech-eval", "python3", "./eval.py", "audiomos25"]
+CMD ["conda", "run", "--no-capture-output", "-n", "synth-speech-eval", "streamlit", "run", "./app.py", "--server.port=8501", "--server.address=0.0.0.0"]

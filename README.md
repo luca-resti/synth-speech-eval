@@ -4,7 +4,7 @@ A multi-scale framework for synthetic speech quality evaluation for quality assu
 
 ## Overview
 
-
+...
 
 ## Installation
 
@@ -19,6 +19,7 @@ Download the SQ_AST model weights from [here](https://github.com/WafaaWardah/SQ-
 ```bash
 conda env create -f environment.yml
 conda activate synth-speech-eval
+conda install cuda-toolkit
 
 pip install -r requirements.txt
 ```
@@ -29,6 +30,8 @@ pip install -r requirements.txt
 sudo apt-get update && sudo apt-get install espeak-ng
 ```
 
+**Windows:** download and install the library from [here](https://espeak.sourceforge.net/download.html)
+
 ## Usage
 
 Use the first arg after eval.py to select the config to run from the **./configs/** folder
@@ -36,6 +39,10 @@ Use the first arg after eval.py to select the config to run from the **./configs
 ```bash
 python eval.py default
 ```
+
+## Licences
+
+See the LICENSE file and third-party-licenses.txt for license information.
 
 ## Acknowledgements
 
