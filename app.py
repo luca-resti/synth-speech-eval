@@ -1,5 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+import threading
 import base64
 import zipfile
 from pathlib import Path
@@ -54,29 +56,54 @@ def force_download(zip_buffer, filename):
     return 0
 
 
+def eval_wrapper(config_file):
+    try:
+        eval.run_eval(config_file)
+        st.session_state.eval_result = "SUCCESS"
+    except Exception as e:
+        st.session_state.eval_result = "FAILED"
+    st.session_state.eval_done = True
+
+
 @st.dialog("Processing Data", dismissible=False)
 def run_evaluation_dialog(config_file):
     zip_download_name = ""
-    # run evaluation
-    with st.spinner('Running evaluation (keep this tab open)...'):
-        try:
-            eval.run_eval(config_file)
-            st.success("Evaluation complete and downloaded started")
-            zip_download_name = f"{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
-        except:
-            st.error("Unable to run analysis, refer to generated log file for more information")
-            zip_download_name = f"FAILED_{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
+    st.session_state.eval_done = False
+    st.session_state.eval_result = None
+    
+    thread = threading.Thread(target=eval_wrapper, args=(config_file,))
+    add_script_run_ctx(thread, get_script_run_ctx())
+    thread.start()
 
-        try:
-            zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", config_file["datetime"].strftime("%Y%m%d_%H%M")))
-            force_download(zip_buffer, f"{zip_download_name}")
-        except:
-            # if user has disconnected?
-            pass
+    status_placeholder = st.empty()
 
-        st.success("Complete!")
-        time.sleep(2)
-        st.rerun()  # Programmatically close the dialog and refresh the page
+    @st.fragment(run_every=5)
+    def monitor_progress():
+        if st.session_state.eval_done:
+            if st.session_state.eval_result == "SUCCESS":
+                st.success("Evaluation complete and downloaded started")
+                zip_download_name = f"{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
+
+            else:
+                st.error("Unable to run analysis, refer to generated log file for more information")
+                zip_download_name = f"FAILED_{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
+
+            try:
+                zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", config_file["datetime"].strftime("%Y%m%d_%H%M")))
+                force_download(zip_buffer, f"{zip_download_name}")
+            except:
+                # if user has disconnected?
+                pass
+
+            time.sleep(2)
+            st.rerun() # Closes dialog
+
+        else:
+            with status_placeholder.container():
+                with st.spinner('Running evaluation (keep this tab open)...'):
+                    time.sleep(5.1) 
+
+    monitor_progress()
 
 
 @st.dialog("Uploading Data", dismissible=False)
@@ -105,6 +132,8 @@ def run_upload_dialog(uploaded_file):
             st.info(f"Uploaded dataset {zip_name}, with {len(wav_files)} wav files")
         else:
             st.error("Validation failed: No .wav files found in the uploaded zip.")
+            if extract_path.exists() and extract_path.is_dir():
+                shutil.rmtree(extract_path)
 
         time.sleep(2)
         st.rerun()  # Programmatically close the dialog and refresh the page
