@@ -22,6 +22,7 @@ conda activate synth-speech-eval
 conda install cuda-toolkit
 
 pip install -r requirements.txt
+pip install espnet==202511 espnet-tts-frontend==0.0.3
 ```
 
 ### Espeak setup:

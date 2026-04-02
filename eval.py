@@ -65,11 +65,11 @@ def run_eval(config_file):
     output_individual_dir = output_dir + "/" + "individual_plots" + "/"
     if not os.path.exists(output_individual_dir):
         os.makedirs(output_individual_dir)
-    output_ind_csv_path = os.path.join(output_dir, "output_sq_ast.csv")
-    output_ind_csv_path_thresh = os.path.join(output_dir, "output_thresholded.csv")
-    output_dir_csv_sorted = os.path.join(output_dir, "sorted_csvs/")
-    if not os.path.exists(output_dir_csv_sorted):
-        os.makedirs(output_dir_csv_sorted)
+    output_ind_tsv_path = os.path.join(output_dir, "output_sq_ast.tsv")
+    output_ind_tsv_path_thresh = os.path.join(output_dir, "output_thresholded.tsv")
+    output_dir_tsv_sorted = os.path.join(output_dir, "sorted_tsvs/")
+    if not os.path.exists(output_dir_tsv_sorted):
+        os.makedirs(output_dir_tsv_sorted)
 
     file_handler = logging.FileHandler(output_dir + '/logs.log')
     file_handler.setLevel(LOGGING_LEVEL)
@@ -148,8 +148,8 @@ def run_eval(config_file):
         for dim in config_file["sq_ast_dims"]:
             output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
             if len(output_ind_df_thresh_for_row) > 0:
-                output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
-                output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_csv_sorted, f"thredholded_sorted_sq_{dim}.csv"), index=False, sep="\t")
+                output_ind_df_thresh_for_row = output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
+                output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_tsv_sorted, f"thredholded_sorted_sq_{dim}.tsv"), index=False, sep="\t")
 
         # remove saliency, fbank lengths and sq_ast_pred rows not in thresholded dataframe
         fbank_lengths = fbank_lengths[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
@@ -298,9 +298,9 @@ def run_eval(config_file):
                     output_sysfig_dir
                 )
     
-        output_ind_df_thresh.to_csv(output_ind_csv_path_thresh, index=False, sep="\t")
+        output_ind_df_thresh.to_csv(output_ind_tsv_path_thresh, index=False, sep="\t")
 
-    output_ind_df.to_csv(output_ind_csv_path, index=False, sep="\t")
+    output_ind_df.to_csv(output_ind_tsv_path, index=False, sep="\t")
 
     with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
         yaml.dump(config_file, outfile)
