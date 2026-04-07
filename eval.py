@@ -288,8 +288,6 @@ def run_eval(config_file):
 
             for dim in config_file["sq_ast_dims"]:
 
-                logger.info(f"pdsm_sq_{dim}: {pdsm_info[f'pdsm_sq_{dim}']}")
-
                 # Save most important phonemes
                 output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
                 output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
