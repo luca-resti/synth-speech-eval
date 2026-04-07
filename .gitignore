@@ -209,11 +209,11 @@ __marimo__/
 # inputs/outputs
 inputs/
 outputs/
-/app/models/weights/col.pth
-/app/models/weights/dis.pth
-/app/models/weights/loud.pth
-/app/models/weights/mos.pth
-/app/models/weights/noi.pth
+/code/models/weights/col.pth
+/code/models/weights/dis.pth
+/code/models/weights/loud.pth
+/code/models/weights/mos.pth
+/code/models/weights/noi.pth
 .vscode
 /audiomos25/*.wav
 /audiomos25/desktop.ini
