@@ -1,13 +1,6 @@
 import numpy as np
 
 
-PDSM_INFO = {
-    "pdsm_sq_mos":[],
-    "pdsm_sq_noi":[],
-    "pdsm_sq_dis":[],
-    "pdsm_sq_col":[],
-    "pdsm_sq_loud":[],
-}
 THRESHOLD_VALUE = 0.4
 COUNT_AS_DOUBLE_PAD = 5 # 50 ms
 

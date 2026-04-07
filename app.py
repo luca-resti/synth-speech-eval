@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
@@ -20,6 +21,10 @@ if "score_threshold" not in st.session_state:
     st.session_state.score_threshold = 3.0
 if "info_expand" not in st.session_state:
     st.session_state.info_expand = False
+if "default_dataset" not in st.session_state:
+    st.session_state.default_dataset = ""
+if "default_dataset_index" not in st.session_state:
+    st.session_state.default_dataset_index = 0
 
 INPUTS_DIR = Path("./inputs/")
 INPUTS_DIR.mkdir(exist_ok=True)
@@ -57,10 +62,11 @@ def force_download(zip_buffer, filename):
 
 
 def eval_wrapper(config_file):
-    try:
-        eval.run_eval(config_file)
+    rtn_message = eval.run_eval(config_file)
+    if rtn_message == 0:
         st.session_state.eval_result = "SUCCESS"
-    except Exception as e:
+    else:
+        st.session_state.error_message = str(rtn_message)
         st.session_state.eval_result = "FAILED"
     st.session_state.eval_done = True
 
@@ -77,7 +83,7 @@ def run_evaluation_dialog(config_file):
 
     status_placeholder = st.empty()
 
-    @st.fragment(run_every=5)
+    @st.fragment(run_every=2)
     def monitor_progress():
         if st.session_state.eval_done:
             if st.session_state.eval_result == "SUCCESS":
@@ -85,8 +91,8 @@ def run_evaluation_dialog(config_file):
                 zip_download_name = f"{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
 
             else:
-                st.error("Unable to run analysis, refer to generated log file for more information")
-                zip_download_name = f"FAILED_{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"
+                st.error(f"Unable to run analysis, refer to generated log file for more information due to error: {st.session_state.error_message}")
+                zip_download_name = f"FAILED_{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"            
 
             try:
                 zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", config_file["datetime"].strftime("%Y%m%d_%H%M")))
@@ -94,16 +100,25 @@ def run_evaluation_dialog(config_file):
             except:
                 # if user has disconnected?
                 pass
-
-            time.sleep(2)
+            if st.session_state.eval_result == "SUCCESS":
+                time.sleep(2)
+            else:
+                time.sleep(8) # give user more time to read error message
             st.rerun() # Closes dialog
 
         else:
             with status_placeholder.container():
                 with st.spinner('Running evaluation (keep this tab open)...'):
-                    time.sleep(5.1) 
+                    time.sleep(2.5) 
 
     monitor_progress()
+
+
+def get_default_dataset_index():
+    if st.session_state.default_dataset in existing_datasets:
+        st.session_state.default_dataset_index = existing_datasets.index(st.session_state.default_dataset)
+    else:
+        st.session_state.default_dataset_index = 0
 
 
 @st.dialog("Uploading Data", dismissible=False)
@@ -130,16 +145,18 @@ def run_upload_dialog(uploaded_file):
 
         if len(wav_files) > 0:
             st.info(f"Uploaded dataset {zip_name}, with {len(wav_files)} wav files")
+            st.session_state.default_dataset = zip_name
+            time.sleep(2)
         else:
             st.error("Validation failed: No .wav files found in the uploaded zip.")
             if extract_path.exists() and extract_path.is_dir():
                 shutil.rmtree(extract_path)
+            time.sleep(4)
 
-        time.sleep(2)
         st.rerun()  # Programmatically close the dialog and refresh the page
 
 
-@st.fragment(run_every=5)
+@st.fragment(run_every=2)
 def keep_alive():
     pass # keeps websocket open
 
@@ -188,9 +205,11 @@ if st.button("Upload"):
         st.warning("Please upload a file")
 
 if len(existing_datasets) > 0:
+    get_default_dataset_index()
+
     selected_dataset = st.selectbox(
         "Choose a dataset to run analysis on",
-        options=[""] + existing_datasets
+        options=existing_datasets, index=st.session_state.default_dataset_index, on_change=get_default_dataset_index
     )
 
     existing_outputs = None
@@ -202,11 +221,11 @@ if len(existing_datasets) > 0:
             if len(existing_outputs) > 0:
                 selected_output_history = st.selectbox(
                     "Old Evaluations of this Dataset",
-                    options=[""] + existing_outputs
+                    options=existing_outputs, index=len(existing_outputs)-1 # default to most recent analysis of this dataset if it exists
                 )
                 
                 if selected_output_history != "":
-                            
+                    
                     if os.path.exists(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/config_used.yaml")):
                         with open(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/config_used.yaml"), 'r') as f:
                             config_temp = yaml.safe_load(f)  
@@ -223,7 +242,7 @@ if len(existing_datasets) > 0:
                         except:
                             pass
 
-    score_threshold = st.slider("Threshold", min_value=1.0, max_value=5.0, step=0.1, value=st.session_state.score_threshold)
+    score_threshold = st.number_input("Threshold", min_value=1.0, max_value=5.0, step=0.1, value=st.session_state.score_threshold)
 
 
     if st.button("Run Evaluation"):
@@ -245,3 +264,4 @@ if len(existing_datasets) > 0:
 
             config_file = config_util.deep_merge(config_file, config_data)
             run_evaluation_dialog(config_file)
+
