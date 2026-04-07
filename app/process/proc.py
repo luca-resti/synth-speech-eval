@@ -13,10 +13,9 @@ stdout_handler.setLevel(LOGGING_LEVEL)
 stdout_handler.setFormatter(formatter)
 logger.addHandler(stdout_handler)
 
-from models import sq_ast_mod
-from models import ppgs_wrapper
-from models import pdsm
-from util import kde_tools, config_util, audio_segmentation, plot_helper_ind, plot_helper_sys
+from ..models import sq_ast_mod, ppgs_wrapper
+from . import pdsm
+from ..util import kde_tools, config_util, audio_segmentation, plot_helper_ind, plot_helper_sys
 
 import threading
 import torch
@@ -323,7 +322,7 @@ def run_eval(config_file):
     return return_code
 
 
-if __name__ == "__main__":
+def run_evaluation():
 
     # Overwrite settings from default if given
     config_file = {}

@@ -4,7 +4,7 @@ from phonemizer import phonemize
 import numpy as np
 import os
 from datetime import datetime
-from models import sq_ast_mod
+from . import sq_ast_mod
 import torchaudio
 
 import logging

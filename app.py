@@ -1,4 +1,3 @@
-import logging
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
@@ -12,8 +11,8 @@ import io
 import yaml
 import time
 from datetime import datetime
-from util import config_util
-import eval
+from dist.app.util import config_util
+from dist.app.process import proc
 
 # Session states and global vars
 
@@ -62,7 +61,7 @@ def force_download(zip_buffer, filename):
 
 
 def eval_wrapper(config_file):
-    rtn_message = eval.run_eval(config_file)
+    rtn_message = proc.run_eval(config_file)
     if rtn_message == 0:
         st.session_state.eval_result = "SUCCESS"
     else:

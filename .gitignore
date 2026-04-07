@@ -209,12 +209,14 @@ __marimo__/
 # inputs/outputs
 inputs/
 outputs/
-/models/weights/col.pth
-/models/weights/dis.pth
-/models/weights/loud.pth
-/models/weights/mos.pth
-/models/weights/noi.pth
+/app/models/weights/col.pth
+/app/models/weights/dis.pth
+/app/models/weights/loud.pth
+/app/models/weights/mos.pth
+/app/models/weights/noi.pth
 .vscode
 /audiomos25/*.wav
 /audiomos25/desktop.ini
 /batch_run.bat
+/pyarmor_runtime_000000
+plan.png

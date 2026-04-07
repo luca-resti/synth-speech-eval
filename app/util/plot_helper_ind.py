@@ -10,7 +10,8 @@ import os
 import numpy as np
 import seaborn as sns
 import torchaudio
-from util.plot_helper_sys import sq_ast_dim_str
+from . import plot_helper_sys
+sq_ast_dim_str = plot_helper_sys.sq_ast_dim_str
 
 # Individual plots
 

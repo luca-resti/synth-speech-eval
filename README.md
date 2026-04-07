@@ -8,12 +8,12 @@ A multi-scale framework for synthetic speech quality evaluation for quality assu
 
 ## Installation
 
-### Cuda Installation:
+### Cuda Drivers Installation:
 [Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)<br>
 [Windows](https://developer.nvidia.com/cuda-12-8-1-download-archive)
 
 ### SQ_AST Setup:
-Download the SQ_AST model weights from [here](https://github.com/WafaaWardah/SQ-AST) and place them in the **./models/weights/** folder
+Download the SQ_AST model weights from [here](https://github.com/WafaaWardah/SQ-AST) and place them in the **./app/models/weights/** folder
 
 ### Conda Setup:
 ```bash
@@ -38,8 +38,15 @@ sudo apt-get update && sudo apt-get install espeak-ng
 Use the first arg after eval.py to select the config to run from the **./configs/** folder
 
 ```bash
-python eval.py default
+python app/eval.py default
 ```
+
+## Building Docker Images
+
+Once downloading docker on your system and initiating the conda environment, run the following within that environment.
+'''bash
+create_image.bat
+'''
 
 ## Licences
 

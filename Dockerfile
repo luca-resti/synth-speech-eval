@@ -39,7 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
+RUN mkdir inputs/
+RUN mkdir outputs/
+COPY dist dist
+COPY pyarmor_runtime_000000 pyarmor_runtime_000000
+COPY app.py app.py
+COPY configs/default.yaml configs/default.yaml
+COPY app/models/weights app/models/weights
 
 EXPOSE 8501
 

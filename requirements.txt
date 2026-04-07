@@ -10,3 +10,4 @@ torch==2.8.0
 torchaudio==2.8.0
 transformers==4.57.6
 whisperx==3.8.2
+pyarmor==9.2.4
