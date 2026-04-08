@@ -77,6 +77,10 @@ def run_eval(config_file):
 
         logger.addHandler(file_handler)
 
+        wait_time = datetime.now() - start_time
+        if wait_time.total_seconds() > 5: # ignore low wait times that are likely just from setup
+            logger.info(f"Wait time for resources: {wait_time}")
+
         # get gpu availability
         if torch.cuda.is_available():
             logger.info(f" === USING GPU === ")

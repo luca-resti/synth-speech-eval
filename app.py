@@ -24,6 +24,8 @@ if "default_dataset" not in st.session_state:
     st.session_state.default_dataset = ""
 if "default_dataset_index" not in st.session_state:
     st.session_state.default_dataset_index = 0
+if "passed_lock" not in st.session_state:
+    st.session_state.passed_lock = False
 
 INPUTS_DIR = Path("./inputs/")
 INPUTS_DIR.mkdir(exist_ok=True)
@@ -60,8 +62,18 @@ def force_download(zip_buffer, filename):
     return 0
 
 
+@st.cache_resource
+def get_gpu_lock():
+    return threading.Lock()
+
+
+gpu_lock = get_gpu_lock()
+
+
 def eval_wrapper(config_file):
-    rtn_message = proc.run_eval(config_file)
+    with gpu_lock:    
+        st.session_state.passed_lock = True
+        rtn_message = proc.run_eval(config_file)
     if rtn_message == 0:
         st.session_state.eval_result = "SUCCESS"
     else:
@@ -75,6 +87,7 @@ def run_evaluation_dialog(config_file):
     zip_download_name = ""
     st.session_state.eval_done = False
     st.session_state.eval_result = None
+    st.session_state.passed_lock = False
     
     thread = threading.Thread(target=eval_wrapper, args=(config_file,))
     add_script_run_ctx(thread, get_script_run_ctx())
@@ -107,8 +120,12 @@ def run_evaluation_dialog(config_file):
 
         else:
             with status_placeholder.container():
-                with st.spinner('Running evaluation (keep this tab open)...'):
-                    time.sleep(2.5) 
+                if st.session_state.passed_lock:
+                    with st.spinner('Running evaluation (keep this tab open, it may take a while)...'):
+                        time.sleep(2.5) 
+                else:
+                    with st.spinner('In the queue for resources (keep this tab open, it may take a while)...'):
+                        time.sleep(2.5) 
 
     monitor_progress()
 

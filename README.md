@@ -35,10 +35,10 @@ sudo apt-get update && sudo apt-get install espeak-ng
 
 ## Usage
 
-Use the first arg after eval.py to select the config to run from the **./configs/** folder
+Use the first arg after eval to select the config to run from the **./configs/** folder
 
 ```bash
-python code/eval.py default
+python -m code.eval default
 ```
 
 ## Building Docker Images

@@ -220,3 +220,4 @@ outputs/
 /batch_run.bat
 /pyarmor_runtime_000000
 plan.png
+*.tar.gz
