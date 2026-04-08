@@ -11,8 +11,8 @@ import io
 import yaml
 import time
 from datetime import datetime
-from dist.code.util import config_util
-from dist.code.process import proc
+from dist.src.util import config_util
+from dist.src.process import proc
 
 # Session states and global vars
 

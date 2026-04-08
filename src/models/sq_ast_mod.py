@@ -338,7 +338,7 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
 
         elif method == "GradCAM":
             model = ASTXL()
-            model.load_state_dict(torch.load(f"code/models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
+            model.load_state_dict(torch.load(f"src/models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
             model.to(device)
             model.eval()
 

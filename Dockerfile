@@ -45,7 +45,7 @@ COPY dist dist
 COPY pyarmor_runtime_000000 pyarmor_runtime_000000
 COPY app.py app.py
 COPY configs/default.yaml configs/default.yaml
-COPY code/models/weights code/models/weights
+COPY src/models/weights src/models/weights
 
 EXPOSE 8501
 
