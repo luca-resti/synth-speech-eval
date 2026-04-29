@@ -237,6 +237,32 @@ def tensor_attention_flow(attn_maps):
     return cls_flow[2:] # remove <CLS> and <DISTILL>
 
 
+def tensor_attention_rollout(attn_maps):
+    """
+    Extracts attention rollout
+
+    Parameters
+    ----------
+    attn_maps (np.array) : extracted attention for each layer
+    
+    Returns
+    ----------
+    cls_rollout (torch.Tensor) : Flattened tensor for attention rollout on CLS (removed <CLS> and <DISTILL> tokens)
+
+    """
+    num_layers, seq_len, _ = attn_maps.shape
+
+    I = torch.eye(seq_len).to(attn_maps.device)
+    A_adj = 0.5 * attn_maps + 0.5 * I
+    rollout = A_adj[0]
+
+    for i in range(1, num_layers):
+        rollout = torch.matmul(A_adj[i], rollout)
+
+    # remove <CLS> and <DISTILL>
+    return rollout[0, 2:]
+
+
 def tensor_grad_cam(activations, gradients):
     '''
     Get GradCAM heatmap for important patches to decision on scoring.
@@ -309,11 +335,11 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
     for dim_index in range(len(dims)):
         dim = dims[dim_index]
             
-        if method == "Flow":
+        if (method == "Flow") or (method == "Raw") or (method == "Rollout"):
             with torch.no_grad():
                 with torch.inference_mode():
                     model = ASTXL()
-                    model.load_state_dict(torch.load(f"models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
+                    model.load_state_dict(torch.load(f"src/models/weights/{dim}.pth", map_location=torch.device(device), weights_only=True))
                     model.to(device)
                     model.eval()
 
@@ -325,15 +351,29 @@ def get_pred_attn(method, dims, dl, device, bs, threshold_value, num_inputs):
                         attentions = attentions.cpu().detach()
                         if (bs == 1) or (pred.dim() == 0):
                             predictions[index, dim_index] = 4*pred + 1 # store prediction for this SQ dimension
-                            if 4*pred + 1 <= threshold_value:
-                                attention_flow = tensor_attention_flow(attentions[0].cpu().detach())
-                                saliency[index, dim_index, :, :] = attention_flow.reshape(12, 101)
+                            if 4*pred + 1 <= threshold_value:                            
+                                if method == "Flow":
+                                    attention_ext = tensor_attention_flow(attentions[0].cpu().detach())
+                                elif method == "Raw":
+                                    attention_ext = attentions[0].cpu().detach()[-1, 0, 2:]
+                                elif method == "Rollout":
+                                    attention_ext = tensor_attention_rollout(attentions[0].cpu().detach())
+
+                                saliency[index, dim_index, :, :] = attention_ext.reshape(12, 101)
+
                         else:
                             for i in index:
                                 predictions[i, dim_index] = 4*pred[i-int(bs*batch_index)] + 1 # store prediction for this SQ dimension
                                 if 4*pred[i-int(bs*batch_index)] + 1 <= threshold_value:
-                                    attention_flow = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
-                                    saliency[i, dim_index, :, :] = attention_flow.reshape(12, 101)
+                                    if method == "Flow":
+                                        attention_ext = tensor_attention_flow(attentions[i-int(bs*batch_index)].cpu().detach())
+                                    elif method == "Raw":
+                                        attention_ext = attentions[i-int(bs*batch_index)].cpu().detach()[-1, 0, 2:]
+                                    elif method == "Rollout":
+                                        attention_ext = tensor_attention_rollout(attentions[i-int(bs*batch_index)].cpu().detach())
+
+                                    saliency[i, dim_index, :, :] = attention_ext.reshape(12, 101)
+                                    
                     logger.info(f"{dim}: 100%")
 
         elif method == "GradCAM":

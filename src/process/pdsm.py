@@ -15,6 +15,17 @@ def l2_norm(x):
     return np.power(np.sum(np.power(x, 2)), 1/2)
 
 
+def l1_norm(x):
+    return np.sum(np.abs(x))
+
+
+def safe_max(x):
+    if len(x.flatten()) > 0:
+        if (x.flatten() > 0).any():
+            return np.max(x.flatten())
+    return 0
+
+
 def get_preprocess_and_pool(config_file):
     """
     Returns the preprocess and pooling functions wanted from the config file
@@ -36,8 +47,14 @@ def get_preprocess_and_pool(config_file):
 
     if config_file["pdsm"]["pool"] == "mean":
         pdsm_pool = np.mean
+    elif config_file["pdsm"]["pool"] == "median":
+        pdsm_pool = np.median
+    elif config_file["pdsm"]["pool"] == "max":
+        pdsm_pool = safe_max
     elif config_file["pdsm"]["pool"] == "sum":
         pdsm_pool = np.sum
+    elif config_file["pdsm"]["pool"] == "l1_norm":
+        pdsm_pool = l1_norm
     elif config_file["pdsm"]["pool"] == "l2_norm":
         pdsm_pool = l2_norm
     
@@ -93,10 +110,10 @@ def PDSM(saliency_map, ppg, ppg_dict, preprocess_fn, pool_fn, k_method, k):
 
     # get "k" max indices from pooled energy per phoneme
     if k_method == "threshold":
-        max_indices = np.argsort(phoneme_energy)[-k:]
+        max_indices = np.argsort(phoneme_energy)[-k:][::-1]
     elif k_method == "percent":
         k_percent = int(len(phoneme_energy) * k)
-        max_indices = np.argsort(phoneme_energy)[-k_percent:]
+        max_indices = np.argsort(phoneme_energy)[-k_percent:][::-1]
 
     # initialise discretised output array
     m_out = np.zeros_like(saliency_map, dtype=np.float32)

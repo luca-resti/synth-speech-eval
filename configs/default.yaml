@@ -25,6 +25,7 @@ whisperx :
 
 kde : 
   bw_method : 0.10
+  output_raw_kde : False
 
 plots : 
   output_pdsm_saliency_overlay : True

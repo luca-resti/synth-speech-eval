@@ -149,12 +149,6 @@ def run_eval(config_file):
                     if not os.path.exists(individual_dir):
                         os.makedirs(individual_dir)
 
-            for dim in config_file["sq_ast_dims"]:
-                output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
-                if len(output_ind_df_thresh_for_row) > 0:
-                    output_ind_df_thresh_for_row = output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
-                    output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_tsv_sorted, f"thredholded_sorted_sq_{dim}.tsv"), index=False, sep="\t")
-
             # remove saliency, fbank lengths and sq_ast_pred rows not in thresholded dataframe
             fbank_lengths = fbank_lengths[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
             sq_ast_pred = sq_ast_pred[output_ind_df_thresh["pre_threshold_index"].to_numpy(), :]
@@ -182,6 +176,24 @@ def run_eval(config_file):
                 "pdsm_sq_dis":[],
                 "pdsm_sq_col":[],
                 "pdsm_sq_loud":[],
+            }
+
+            kde_info = {
+                "kde_flatness_sq_mos":[],
+                "kde_flatness_sq_noi":[],
+                "kde_flatness_sq_dis":[],
+                "kde_flatness_sq_col":[],
+                "kde_flatness_sq_loud":[],
+                "kde_x_sq_mos":[],
+                "kde_x_sq_noi":[],
+                "kde_x_sq_dis":[],
+                "kde_x_sq_col":[],
+                "kde_x_sq_loud":[],
+                "kde_y_sq_mos":[],
+                "kde_y_sq_noi":[],
+                "kde_y_sq_dis":[],
+                "kde_y_sq_col":[],
+                "kde_y_sq_loud":[]
             }
 
             # get kernel density estimate for both time and frequency domain
@@ -237,6 +249,12 @@ def run_eval(config_file):
                         kde_x_info[file_idx, dim_index, :len(kde_x)] = kde_x
                         kde_y_info[file_idx, dim_index, :] = kde_y
 
+                        if config_file["kde"]["output_raw_kde"]:
+                            kde_info[f"kde_x_sq_{dim}"].append(str(kde_x).replace("\n", ""))
+                            kde_info[f"kde_y_sq_{dim}"].append(str(kde_y).replace("\n", ""))
+
+                        kde_info[f"kde_flatness_sq_{dim}"].append(kde_tools.calculate_spectral_flatness(kde_x))
+
                         # save the output images for scores that don't meet the threshold
                         if (config_file["plots"]["output_pdsm_saliency_overlay"]) or (config_file["plots"]["output_joint_kde"]):
 
@@ -263,7 +281,8 @@ def run_eval(config_file):
 
                     else:
                         # store dummy phoneme information to save lengths
-                        pdsm_info[f"pdsm_sq_{dim}"].append([]) 
+                        pdsm_info[f"pdsm_sq_{dim}"].append(["n/a"]) 
+                        kde_info[f"kde_flatness_sq_{dim}"].append("n/a")
                 
                 # save kde over time
                 if (config_file["plots"]["output_time_kde"]):
@@ -287,6 +306,8 @@ def run_eval(config_file):
                     output_sysfig_dir
                 )
 
+            output_ind_df_thresh["transcription"] = word_alignments
+
             logger.info(f"PDSM/KDE processing completed in time: {datetime.now() - pdsm_start_time}")
 
             for dim in config_file["sq_ast_dims"]:
@@ -294,6 +315,12 @@ def run_eval(config_file):
                 # Save most important phonemes
                 output_ind_df_thresh[f"pdsm_sq_{dim}"] = pdsm_info[f"pdsm_sq_{dim}"]
                 output_ind_df_thresh[f"pdsm_sq_{dim}_num"] = len(pdsm_info[f"pdsm_sq_{dim}"])
+
+                if config_file["kde"]["output_raw_kde"]:
+                    output_ind_df_thresh[f"kde_x_sq_{dim}"] = kde_info[f"kde_x_sq_{dim}"]
+                    output_ind_df_thresh[f"kde_y_sq_{dim}"] = kde_info[f"kde_y_sq_{dim}"]
+
+                output_ind_df_thresh[f"kde_flatness_sq_{dim}"] = kde_info[f"kde_flatness_sq_{dim}"]
 
                 if (config_file["plots"]["output_phoneme_hist"]) or (config_file["plots"]["output_double_phoneme_hist"]):
                     # get threshold for current dimension
@@ -309,16 +336,22 @@ def run_eval(config_file):
         
             output_ind_df_thresh.to_csv(output_ind_tsv_path_thresh, index=False, sep="\t")
 
-        output_ind_df.to_csv(output_ind_tsv_path, index=False, sep="\t")
+            for dim in config_file["sq_ast_dims"]:
+                output_ind_df_thresh_for_row = output_ind_df_thresh[output_ind_df_thresh[f"sq_{dim}"] <= config_file["score_threshold"]]
+                if len(output_ind_df_thresh_for_row) > 0:
+                    output_ind_df_thresh_for_row = output_ind_df_thresh_for_row.sort_values(f"sq_{dim}", ascending=True)
+                    output_ind_df_thresh_for_row.to_csv(os.path.join(output_dir_tsv_sorted, f"thredholded_sorted_sq_{dim}.tsv"), index=False, sep="\t")
 
-        with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
-            yaml.dump(config_file, outfile)
+        output_ind_df.to_csv(output_ind_tsv_path, index=False, sep="\t")
 
         logger.info(f"Completed analysis in {str((datetime.now() - start_time))}")
 
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return_code = e
+
+    with open(f'{output_dir}/config_used.yaml', 'w') as outfile:
+        yaml.dump(config_file, outfile)
 
     # remove loggers
     logger.removeHandler(file_handler)
