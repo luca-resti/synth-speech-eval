@@ -1,0 +1,47 @@
+# This file can be used as a guide to construct own config file
+
+output_dir : ./outputs/
+path : ./inputs/
+dataset_name : test #insert folder name here if unknown
+language: en #language of speech if known, leave blank if unsure
+
+score_threshold : 3 #threshold for analysis
+
+sq_ast_dims : ["mos", "noi", "dis", "col", "loud"] #array of dimensions to test
+
+saliency :
+  saliency_method : "GradCAM" #saliency extraction method, can be ["Raw", "Flow", "Rollout", "GradCAM"]
+  saliency_interp_method : nearest #interpolation method see "torch.nn.functional.F" for options
+
+pdsm :
+  k_method : percent #can be ["threshold", "percent"], where threshold gives the k worst, whereas percent gives k percent worst
+  k : 0.1 #either integer if k_method is "threshold", or float percentage if k_method is "percent"
+  preprocess : abs #preprocessing function can either be ["abs", "thresh_abs"], where thresh_abs has a threshold of 0.4
+  pool : l2_norm #pdsm pooling function can be ["max", "sum", "mean", "median", "l1_norm", "l2_norm"]
+
+sq_ast :
+  batch_size : 16 #max batch size for SQ_AST processing
+
+whisperx :
+  batch_size : 32 #max batch size for WhisperX processing
+
+kde : 
+  bw_method : 0.10 #guassian width (0.1 default through experimentation)
+  output_raw_kde : False #outputs the raw KDE into the tsv files
+
+plots : #leave all as true to get full reports
+  output_pdsm_saliency_overlay : True
+  output_joint_kde : True
+  output_time_kde : True
+
+  output_asr_confidence : True
+  output_sys_violin : True
+  output_sys_bar : True
+  output_sys_corr : True
+  output_sys_wav_chan : True
+  output_freq_kde : True
+  
+  output_phoneme_hist : True
+  output_double_phoneme_hist : True
+  
+  output_asr_confidence_violin : True
