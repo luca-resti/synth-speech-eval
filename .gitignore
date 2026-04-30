@@ -228,3 +228,4 @@ plan.png
 /output_lt_wavs
 /debug_entry.py
 /*.ipynb
+/configs/*.yaml
