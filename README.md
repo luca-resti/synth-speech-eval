@@ -7,9 +7,17 @@ A multi-scale framework for synthetic speech quality evaluation for quality assu
 This tool produces utterance and system-level analysis for datasets of synthetic speech.
 Using [SQ_AST](https://github.com/WafaaWardah/SQ-AST) and [WhisperX](https://github.com/m-bain/whisperX) as a backbone, interpretability methods are used to extract areas within the synthetic speech samples which are deemed troublesome on the sound quality metrics of Mean Opinion Score (MOS), Colouration, Discontinuity, Noisiness, and Loudness.
 
+### Methodology Overview:
 The following image shows an overview of the data flow within the tool.
 ![alt text](method_flow.png "Methodology Flow")
 
+### Input Audio Requirements:
+- Float and PCM wav files
+- Up to 48kHz sample rate
+- Can be multiple channel (each channel treated separately)
+- Files larger than 10s will be split into segments
+
+### Known Issues:
 Before use, please refer to the repository "issues" page for any known current bugs or future development plans.
 
 ## Installation
