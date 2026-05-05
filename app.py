@@ -26,6 +26,13 @@ if "default_dataset_index" not in st.session_state:
     st.session_state.default_dataset_index = 0
 if "passed_lock" not in st.session_state:
     st.session_state.passed_lock = False
+if "saliency_extraction_method" not in st.session_state:
+    st.session_state.saliency_extraction_method = 0
+if "pdsm_method" not in st.session_state:
+    st.session_state.pdsm_method = 0
+
+SALIENCY_EXTRACTION_METHODS = ["GradCAM", "Raw", "Flow", "Rollout"]
+PDSM_POOLING_METHODS = ["l2_norm", "l1_norm", "max", "sum", "mean", "median"]
 
 INPUTS_DIR = Path("./inputs/")
 INPUTS_DIR.mkdir(exist_ok=True)
@@ -106,12 +113,9 @@ def run_evaluation_dialog(config_file):
                 st.error(f"Unable to run analysis, refer to generated log file for more information due to error: {st.session_state.error_message}")
                 zip_download_name = f"FAILED_{selected_dataset}_{config_file["datetime"].strftime("%Y%m%d_%H%M")}.zip"            
 
-            try:
-                zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", config_file["datetime"].strftime("%Y%m%d_%H%M")))
-                force_download(zip_buffer, f"{zip_download_name}")
-            except:
-                # if user has disconnected?
-                pass
+            zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", config_file["datetime"].strftime("%Y%m%d_%H%M")))
+            force_download(zip_buffer, f"{zip_download_name}")
+
             if st.session_state.eval_result == "SUCCESS":
                 time.sleep(2)
             else:
@@ -236,8 +240,9 @@ if len(existing_datasets) > 0:
         with st.expander("History", expanded=False):
             if len(existing_outputs) > 0:
                 selected_output_history = st.selectbox(
-                    "Old Evaluations of this Dataset",
-                    options=existing_outputs, index=len(existing_outputs)-1 # default to most recent analysis of this dataset if it exists
+                    "Previous Evaluations of this Dataset",
+                    options=existing_outputs, index=len(existing_outputs)-1, # default to most recent analysis of this dataset if it exists
+                    help="Download a previous evaluation of the dataset selected (for instance if you are running with different analysis options or get disconnected during a session)"
                 )
                 
                 if selected_output_history != "":
@@ -248,9 +253,9 @@ if len(existing_datasets) > 0:
                             if "score_threshold" in config_temp.keys():
                                 score_threshold = config_temp["score_threshold"]
 
-                if st.button("Download Old Evaluation"):    
+                if st.button("Download Previous Evaluation"):    
                     if selected_output_history == "":
-                        st.error("Please select an old dataset wavluation to download")
+                        st.error("Please select a previous dataset evaluation to download")
                     else:
                         try:
                             zip_buffer = get_zip_buffer(os.path.join(f"{OUTUTS_DIR}/{selected_dataset}/", selected_output_history))
@@ -258,7 +263,17 @@ if len(existing_datasets) > 0:
                         except:
                             pass
 
-    score_threshold = st.number_input("Threshold", min_value=1.0, max_value=5.0, step=0.1, value=st.session_state.score_threshold)
+    score_threshold = st.number_input("Threshold", min_value=1.0, max_value=5.0, step=0.1, value=st.session_state.score_threshold, help="Upper threshold to run analysis on for each sound quality metric.")
+    saliency_method = st.selectbox(
+        "Saliency Extraction Method",
+        options=SALIENCY_EXTRACTION_METHODS, index=st.session_state.saliency_extraction_method,
+        help="Method to use for attention saliency extraction from model (GradCAM as default as is perceived to work best for most datasets tested)"
+    )
+    pdsm_method = st.selectbox(
+        "Saliency Extraction Method",
+        options=PDSM_POOLING_METHODS, index=st.session_state.pdsm_method,
+        help="Method to use in determining the troublesome phonemes in utterance (l2_norm as default due to robustness for many datasets tested)"
+    )
 
 
     if st.button("Run Evaluation"):
@@ -269,7 +284,13 @@ if len(existing_datasets) > 0:
             config_data = {
                 "dataset_name" : selected_dataset,
                 "score_threshold" : score_threshold,
-                "datetime" : datetime.now()
+                "datetime" : datetime.now(),
+                "pdsm" : {
+                    "pool" : pdsm_method
+                },
+                "saliency" : {
+                    "saliency_method" : saliency_method
+                }
             }
 
             # load default config

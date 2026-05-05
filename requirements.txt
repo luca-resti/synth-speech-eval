@@ -1,6 +1,7 @@
+pyannote.audio==4.0.4
 matplotlib==3.10.8
 numpy==2.4.4
-pandas>=2.0.0,<3.0.0
+pandas==2.3.3
 phonemizer==3.3.0
 PyYAML==6.0.3
 scipy==1.17.1

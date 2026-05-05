@@ -15,12 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm miniconda.sh
 
 # Get environment plugins
-COPY environment.yml requirements.txt ./
+COPY environment.yml ./
+RUN conda env create -f environment.yml -v
 
-RUN conda env create -f environment.yml -v && \
-    conda run -n synth-speech-eval pip install -r requirements.txt -v && \
-    conda run -n synth-speech-eval pip install espnet==202511 espnet-tts-frontend==0.0.3 -v && \
-    conda clean -afy
+COPY requirements.txt ./
+RUN conda run -n synth-speech-eval python -m pip install -r requirements.txt -v
+RUN conda run -n synth-speech-eval python -m pip install espnet==202511 espnet-tts-frontend==0.0.3 -v 
+RUN conda clean -afy
 
 # Runtime
 FROM nvidia/cuda:12.6.2-runtime-ubuntu24.04
