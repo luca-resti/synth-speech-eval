@@ -177,7 +177,7 @@ def plot_saliency_jointgrid(
     g = sns.JointGrid(height=4, ratio=5, space=0.1)
     g.fig.set_size_inches(15, 7)
     g.ax_joint.imshow(spectrogram.T, aspect='auto', cmap='gray', origin='lower')
-    pos = g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.1)
+    pos = g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.25)
     g.ax_joint.set_xticks(
         tick_indices, 
         tick_times
