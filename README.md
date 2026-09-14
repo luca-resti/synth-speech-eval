@@ -1,6 +1,6 @@
-# Multi-Scale Synthetic Speech Evaluation Framework
+# eXplainable SQ-AST (XSQ-AST) An Explainable Audio Spectrogram Transformer Framework for Localising Synthetic Speech Artifacts
 
-A multi-scale framework for synthetic speech quality evaluation for quality assurance.
+A framework for synthetic speech quality evaluation for quality assurance.
 
 ## Overview
 
