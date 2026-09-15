@@ -9,6 +9,13 @@ import os
 import numpy as np
 import seaborn as sns
 
+TITLE_FONT_SIZE = 18
+MAIN_LABEL_FONT_SIZE = 14
+TRANSCRIPTION_FONT_SIZE = 12
+DPI_AMOUNT = 100
+TITLE_PAD = 16
+SUPTITLE_PAD = 1.05
+
 MAX_PHONEME_PLOT = 10
 
 sq_ast_dim_str = {
@@ -58,20 +65,22 @@ def plot_sys_violin_plot(
                 linestyle="--", alpha=0.5, label="Threshold")
     
     label_dims = [sq_ast_dim_str[dim] for dim in all_dims]
-    plt.xticks(range(len(all_dims)), labels=label_dims)
-    plt.xlabel("Sound Quality Output Categories")
-    plt.ylabel("Score (1-5)")
+    plt.xticks(range(len(all_dims)), labels=label_dims, fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
+    plt.xlabel("Sound Quality Output Categories", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.ylabel("Score (1-5)", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
     plt.xlim(-0.5, len(all_dims) - 0.5)
     plt.ylim(0, 5.5)
     
     if len(output_df) == 1:
-        plt.title(f"{config_file['dataset_name']}: Scatter Plot\nfor Sound Quality Outputs Categories", fontsize=14)
+        plt.title(f"{config_file['dataset_name']}: Scatter Plot\nfor Sound Quality Outputs Categories", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
     else:
-        plt.title(f"{config_file['dataset_name']}: Violin Plot\nfor Sound Quality Categories Over Dataset", fontsize=14)
+        plt.title(f"{config_file['dataset_name']}: Violin Plot\nfor Sound Quality Categories Over Dataset", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
 
-    plt.legend(loc='lower right')
+    plt.legend(loc='lower right', fontsize=MAIN_LABEL_FONT_SIZE)
 
-    plt.savefig(os.path.join(output_dir, "sq_violin.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, "sq_violin.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -103,16 +112,17 @@ def plot_sys_bar_chart(
     plot_data = plot_data/len(output_df)
     plt.bar(range(len(all_dims)), plot_data, color='skyblue')
 
-    plt.xticks(range(len(all_dims)), labels=label_dims)
-    plt.xlabel("Sound Quality Output Categories")
-    plt.ylabel("Percentage of Dataset")
+    plt.xticks(range(len(all_dims)), labels=label_dims, fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.xlabel("Sound Quality Output Categories", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.ylabel("Percentage of Dataset", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
     plt.xlim(-0.5, len(all_dims) - 0.5)
     plt.ylim(0, 1.0)
-    plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], )
+    plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
     
-    plt.title(f"{config_file['dataset_name']}: Percentage of Segments\nUnder Threshold for Categories Over Dataset", fontsize=14)
+    plt.title(f"{config_file['dataset_name']}: Percentage of Segments\nUnder Threshold for Categories Over Dataset", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
 
-    plt.savefig(os.path.join(output_dir, "perc_under_thresh.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, "perc_under_thresh.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -149,16 +159,17 @@ def plot_sys_chan_bar_chart(
 
         plt.bar(list(hist_info.keys()), list(hist_info.values()), color='skyblue')
 
-        plt.xticks(range(max_chans), labels=range(max_chans))
-        plt.xlabel("Wav Channel")
-        plt.ylabel("Percentage of Dataset")
+        plt.xticks(range(max_chans), labels=range(max_chans), fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        plt.xlabel("Wav Channel", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        plt.ylabel("Percentage of Dataset", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
         plt.xlim(-0.5, max_chans - 0.5)
         plt.ylim(0, 1.0)
-        plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], )
+        plt.yticks([0.1*i for i in range(11)], [str(10*i) + "%" for i in range(11)], fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
         
-        plt.title(f"{config_file['dataset_name']}: Percentage of Wav Channel\nNumber in Thresholded Dataset", fontsize=14)
+        plt.title(f"{config_file['dataset_name']}: Percentage of Wav Channel\nNumber in Thresholded Dataset", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
 
-        plt.savefig(os.path.join(output_dir, "wav_chan_perc.png"), dpi=100)
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, "wav_chan_perc.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
         plt.clf()
         plt.close()
 
@@ -197,21 +208,22 @@ def plot_sys_asr_conf_violin_plot(
             pc.set_edgecolor('black')
             pc.set_alpha(0.3)
     
-    plt.xticks(range(2), labels=["Segment Mean", "Segment Median"])
-    plt.xlabel("ASR Average Type")
-    plt.ylabel("Confidence")
+    plt.xticks(range(2), labels=["Segment Mean", "Segment Median"], fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.xlabel("ASR Average Type", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.ylabel("Confidence", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
     plt.xlim(-0.5, 2 - 0.5)
     plt.ylim(0, 1.0)
-    plt.yticks([0.1*i for i in range(11)], [str(10*i)+"%" for i in range(11)])
+    plt.yticks([0.1*i for i in range(11)], [str(10*i)+"%" for i in range(11)], fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
     
     if len(output_df) == 1:
-        plt.title(f"{config_file['dataset_name']}: Scatter Plot for Average ASR\nConfidence per Segment for Data under Threshold", fontsize=14)
+        plt.title(f"{config_file['dataset_name']}: Scatter Plot for Average ASR\nConfidence per Segment for Data under Threshold", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
     else:
-        plt.title(f"{config_file['dataset_name']}: Violin Plot for Average ASR\nConfidence per Segment For Data Under Threshold", fontsize=14)
+        plt.title(f"{config_file['dataset_name']}: Violin Plot for Average ASR\nConfidence per Segment For Data Under Threshold", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
         
-    plt.legend(loc='lower right')
+    plt.legend(loc='lower right', fontsize=MAIN_LABEL_FONT_SIZE)
 
-    plt.savefig(os.path.join(output_dir, "asr_conf_violin.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, "asr_conf_violin.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -249,12 +261,18 @@ def plot_phoneme_hists(
         single_hist_len = len(list(single_hist.keys()))
         if single_hist_len > MAX_PHONEME_PLOT:
             plt.bar(list(single_hist.keys())[:MAX_PHONEME_PLOT], list(single_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phonemes at Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}')
+            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phonemes\nat Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
         else:
             plt.bar(list(single_hist.keys()), list(single_hist.values()), color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {single_hist_len} most Important Phonemes at Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}')
-        plt.ylabel('Proportion of Important Phonemes')
-        plt.savefig(os.path.join(output_dir, f"sys_single_hist_{dim}.png"), dpi=100)
+            plt.title(f'{dataset_name}: Proportions of {single_hist_len} most Important Phonemes\nat Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
+        plt.xticks(fontsize=MAIN_LABEL_FONT_SIZE)    
+        plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
+        plt.ylabel('Proportion of Important Phonemes', fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        plt.xlabel('Phonemes', fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+
+
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, f"sys_single_hist_{dim}.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
         plt.clf()
         plt.close()
 
@@ -263,13 +281,17 @@ def plot_phoneme_hists(
         double_hist_len = len(list(double_hist.keys()))
         if double_hist_len > MAX_PHONEME_PLOT:
             plt.bar(list(double_hist.keys())[:MAX_PHONEME_PLOT], list(double_hist.values())[:MAX_PHONEME_PLOT], color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=14)
+            plt.title(f'{dataset_name}: Proportions of {MAX_PHONEME_PLOT} most Important Phoneme-Pairs\nat Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
         else:
             plt.bar(list(double_hist.keys()), list(double_hist.values()), color='skyblue')
-            plt.title(f'{dataset_name}: Proportions of {double_hist_len} most Important Phoneme-Pairs at Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=14)
-        plt.ylabel('Proportion of Important Phonemes')
-
-        plt.savefig(os.path.join(output_dir, f"sys_double_hist_{dim}.png"), dpi=100)
+            plt.title(f'{dataset_name}: Proportions of {double_hist_len} most Important Phoneme-Pairs\nat Threshold Value {thresh_val} for {sq_ast_dim_str[dim]}', fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
+        plt.xticks(fontsize=MAIN_LABEL_FONT_SIZE)  
+        plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
+        plt.ylabel('Proportion of Important Phonemes', fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        plt.xlabel('Phonemes', fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, f"sys_double_hist_{dim}.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
         plt.clf()
         plt.close()
 
@@ -305,12 +327,17 @@ def plot_kde_for_freq_sys(
                 if np.max(temp_agg) > max_val:
                     max_val = np.max(temp_agg)
                 plt.plot(temp_agg, label=all_dims[dim_index])
-        plt.legend(loc='upper right')
-        plt.xlabel("Mel Frequency Bin")
+        plt.legend(loc='upper right', fontsize=MAIN_LABEL_FONT_SIZE)
+        plt.xlabel("Mel Frequency Bin", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+        plt.ylabel("Normalised importance", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
         plt.xlim(0, 128)
         plt.ylim(0, max_val*1.05)
-        plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System", fontsize=14)
-        plt.savefig(os.path.join(output_dir, f"frequency_KDE_for_dims.png"), dpi=100)
+        plt.xticks(fontsize=MAIN_LABEL_FONT_SIZE)
+        plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
+        plt.title(f"{config_file["dataset_name"]}: KDE Aggregate Frequency Importance For System", fontsize=TITLE_FONT_SIZE, pad=TITLE_PAD)
+        
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, f"frequency_KDE_for_dims.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
         plt.clf()
         plt.close()
 
@@ -342,15 +369,26 @@ def plot_metric_corr_plot(
         plot_columns[f"sq_{dim}"] = sq_ast_dim_str[dim]
     df_to_plot = df_to_plot.rename(columns=plot_columns)
 
-    plt.figure(figsize=(15, 12))
-    g = sns.heatmap(df_to_plot.corr(), annot=True)
+    plt.figure(figsize=(10, 10))
+    g = sns.heatmap(df_to_plot.corr(), annot=True, annot_kws={"fontsize":MAIN_LABEL_FONT_SIZE})
+    g.set_xticklabels(g.get_xmajorticklabels(), fontsize=MAIN_LABEL_FONT_SIZE)
+    g.set_yticklabels(g.get_ymajorticklabels(), fontsize=MAIN_LABEL_FONT_SIZE)
+    g.xaxis.tick_top()
+
+    cbar = g.collections[0].colorbar
+    cbar.ax.tick_params(labelsize=MAIN_LABEL_FONT_SIZE)
+
 
     if is_thresholded:
-        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Thresholded Dataset", fontsize=14)
-        plt.savefig(os.path.join(output_dir, f"sq_metric_corr_thresh.png"), dpi=100, bbox_inches='tight')
+        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Thresholded Dataset", fontsize=TITLE_FONT_SIZE)
+        
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, f"sq_metric_corr_thresh.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     else:
-        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Whole Dataset", fontsize=14)
-        plt.savefig(os.path.join(output_dir, f"sq_metric_corr.png"), dpi=100, bbox_inches='tight')
+        plt.suptitle(f"{config_file["dataset_name"]}: Correlation Between\nthe Metrics over Whole Dataset", fontsize=TITLE_FONT_SIZE)
+
+        plt.tight_layout(pad=SUPTITLE_PAD)
+        plt.savefig(os.path.join(output_dir, f"sq_metric_corr.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 

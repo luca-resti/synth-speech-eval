@@ -10,8 +10,8 @@ import os
 import numpy as np
 import seaborn as sns
 import torchaudio
-from . import plot_helper_sys
-sq_ast_dim_str = plot_helper_sys.sq_ast_dim_str
+from .plot_helper_sys import TITLE_FONT_SIZE, MAIN_LABEL_FONT_SIZE, TRANSCRIPTION_FONT_SIZE, DPI_AMOUNT, TITLE_PAD, SUPTITLE_PAD
+from .plot_helper_sys import sq_ast_dim_str
 
 # Individual plots
 
@@ -89,26 +89,28 @@ def plot_saliency_with_pdsm(
     plt.imshow(pdsm_image, aspect='auto', origin='lower')
     
     plt.xlim(0, fbank_length)
-    plt.xticks(tick_indices, tick_times)
+    plt.xticks(tick_indices, tick_times, fontsize=MAIN_LABEL_FONT_SIZE)
+    plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
     plt.ylim(0, 128)
 
     y_offset_index = 0
     for phon in dim_phon:
         phon_text = str(y_offset_index+1) + "\n" + phon[1]
-        plt.text((phon[2]+phon[3])*0.5, 0.9*128, phon_text, fontdict={"fontsize":5, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
+        plt.text((phon[2]+phon[3])*0.5, 0.88*128, phon_text, fontdict={"fontsize":TRANSCRIPTION_FONT_SIZE, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"})
         y_offset_index += 1
-    plt.title("Mel-Spectrogram With Most Important Phonemes")
-    plt.xlabel("Time in Seconds")
-    plt.ylabel("Mel Frequency Bin")
+    plt.title("Mel-Spectrogram With Most Important Phonemes", fontsize=MAIN_LABEL_FONT_SIZE, pad=TITLE_PAD)
+    plt.xlabel("Time in Seconds", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
+    plt.ylabel("Mel Frequency Bin", fontdict={"fontsize":MAIN_LABEL_FONT_SIZE})
 
     plt.subplot(2, 1, 2)
     plt.imshow(saliency_map, alpha=0.6, aspect='auto', origin='lower', cmap='jet')
     plt.xlim(0, fbank_length)
-    plt.xticks(tick_indices, tick_times)
+    plt.xticks(tick_indices, tick_times, fontsize=MAIN_LABEL_FONT_SIZE)
+    plt.yticks(fontsize=MAIN_LABEL_FONT_SIZE)
     plt.ylim(0, 128)
-    plt.title(f"Important Areas for {sq_ast_dim_str[dim]}")
-    plt.xlabel("Time in Seconds")
-    plt.ylabel("Mel Frequency Bin")
+    plt.title(f"Important Areas for {sq_ast_dim_str[dim]}", fontsize=MAIN_LABEL_FONT_SIZE, pad=TITLE_PAD)
+    plt.xlabel("Time in Seconds", fontsize=MAIN_LABEL_FONT_SIZE)
+    plt.ylabel("Mel Frequency Bin", fontsize=MAIN_LABEL_FONT_SIZE)
     
     if file_path == "":
         str_file_path = config_file["dataset_name"]
@@ -122,15 +124,16 @@ def plot_saliency_with_pdsm(
     if config_file["pdsm"]["k_method"] == "threshold":
         plt.suptitle(
             f"File: {str_file_path}, {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\n(With the {config_file["pdsm"]["k"]:.0f} Most Important Phonemes Highlighted)", 
-            fontsize=14
+            fontsize=TITLE_FONT_SIZE
         )
     elif config_file["pdsm"]["k_method"] == "percent":
         plt.suptitle(
             f"File: {str_file_path}, {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\n(With the {100*config_file["pdsm"]["k"]:.0f}% Most Important Phonemes Highlighted)", 
-            fontsize=14
+            fontsize=TITLE_FONT_SIZE
         )
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_Phoneme.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_Phoneme.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -178,14 +181,17 @@ def plot_saliency_jointgrid(
     g.fig.set_size_inches(15, 7)
     g.ax_joint.imshow(spectrogram.T, aspect='auto', cmap='gray', origin='lower')
     pos = g.ax_joint.imshow(saliency_map, aspect='auto', cmap='jet', origin='lower', alpha=0.25)
-    g.ax_joint.set_xticks(
-        tick_indices, 
-        tick_times
-    )
-    g.ax_joint.set_xlabel("Time in Seconds")
-    g.ax_joint.set_ylabel("Mel Frequency Bins")
+
+    g.ax_joint.set_xticks(tick_indices, tick_times)
+    g.ax_joint.tick_params(axis='x', labelsize=MAIN_LABEL_FONT_SIZE)
+    g.ax_joint.set_xlabel("Time in Seconds", fontsize=MAIN_LABEL_FONT_SIZE)
+
+    g.ax_joint.set_ylabel("Mel Frequency Bins", fontsize=MAIN_LABEL_FONT_SIZE)
+    g.ax_joint.tick_params(axis='y', labelsize=MAIN_LABEL_FONT_SIZE)
+
     
     last_end = 0
+    binary_offset = 0
     for word_segment in result_word_alignment:
         if ("start" in word_segment.keys()) and ("end" in word_segment.keys()):
             if int(word_segment["start"]/SPEC_TIME_HOP) != last_end:
@@ -204,10 +210,11 @@ def plot_saliency_jointgrid(
             last_end = int(word_segment["end"]/SPEC_TIME_HOP)
             g.ax_joint.text(
                 (int(word_segment["start"]/SPEC_TIME_HOP) + int(word_segment["end"]/SPEC_TIME_HOP))*0.5, 
-                128*0.95, 
+                128*(0.95-binary_offset*0.05), 
                 word_segment["word"], 
-                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+                fontdict={"fontsize":TRANSCRIPTION_FONT_SIZE, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
             )
+            binary_offset = not binary_offset
 
     g.ax_marg_x.plot(x_flat, kde_x_est)
     g.ax_marg_y.plot(kde_y_est, y_flat)
@@ -231,11 +238,11 @@ def plot_saliency_jointgrid(
         title = f"File: {str_file_path} {str_wav_segment}{sq_ast_dim_str[dim]}: {np.round(sq_ast_pred_i, 1):.1f}\nwith KDE for Time/Freq"
     
     g.fig.suptitle(
-        title, 
-        fontsize=14, y=1.03
+        title, fontsize=TITLE_FONT_SIZE
     )
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_KDE_Word.png"), dpi=100, bbox_inches='tight')
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_{dim}_KDE_Word.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -300,6 +307,8 @@ def plot_kde_along_waveform(
     axs[0].set_xticks([0], [None])
     axs[0].axis("off")
     axs[0].set_yticks([0], [None])
+    axs[0].tick_params(axis='x', labelsize=MAIN_LABEL_FONT_SIZE)
+    axs[0].tick_params(axis='y', labelsize=MAIN_LABEL_FONT_SIZE)
     axs[0].set_ylim(0, 1.05) # extra 5%
 
     last_end = 0
@@ -348,15 +357,18 @@ def plot_kde_along_waveform(
                 (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
                 1.1, 
                 word_segment["word"], 
-                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+                fontdict={"fontsize":TRANSCRIPTION_FONT_SIZE, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
             )
 
-    axs[1].set_ylim(-1, 1)
     axs[1].set_xlim(0, len(audio_test))
     axs[1].set_xticks(tick_indices, tick_times)
-    axs[1].set_xlabel("Time in seconds")
-    axs[1].set_ylabel("Amplitude")
+    axs[1].tick_params(axis='x', labelsize=MAIN_LABEL_FONT_SIZE)
+    axs[1].set_xlabel("Time in seconds", fontsize=MAIN_LABEL_FONT_SIZE)
+
+    axs[1].set_ylim(-1, 1)
     axs[1].set_yticks([0], [None])
+    axs[1].tick_params(axis='y', labelsize=MAIN_LABEL_FONT_SIZE)
+    axs[1].set_ylabel("Amplitude", fontsize=MAIN_LABEL_FONT_SIZE)
 
     if file_path == "":
         str_file_path = config_file["dataset_name"]
@@ -367,9 +379,10 @@ def plot_kde_along_waveform(
     if df_row["total_wav_segments"] > 1:
         str_wav_segment = f"(segment: {file_segment}), "
 
-    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}Importance over Time\nFor Sound Quality Metrics")
+    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}Importance over Time\nFor Sound Quality Metrics", fontsize=TITLE_FONT_SIZE)
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_KDE_Time_Word.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_KDE_Time_Word.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
@@ -443,8 +456,12 @@ def plot_asr_confidence_along_waveform(
     
     axs[0].set_xlim(0, len(audio_test))
     axs[0].set_xticks([0], [None])
+    axs[0].tick_params(axis="x", labelsize=MAIN_LABEL_FONT_SIZE)
+
     axs[0].set_yticks([0, 1.0], ["0%", "100%"])
-    axs[0].set_ylabel("Confidence")
+    axs[0].tick_params(axis="y", labelsize=MAIN_LABEL_FONT_SIZE)
+    axs[0].yaxis.tick_right()
+    axs[0].set_ylabel("Confidence", fontsize=MAIN_LABEL_FONT_SIZE)
     axs[0].set_ylim(0, 1.05) # extra 5%
     axs[0].spines['right'].set_visible(False)
     axs[0].spines['top'].set_visible(False)
@@ -473,15 +490,18 @@ def plot_asr_confidence_along_waveform(
                 (word_segment["start"]*fs_test+word_segment["end"]*fs_test)*0.5, 
                 1.1, 
                 word_segment["word"], 
-                fontdict={"fontsize":7, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
+                fontdict={"fontsize":TRANSCRIPTION_FONT_SIZE, "color":"white", "backgroundcolor":"black", "horizontalalignment":"center"}
             )
 
-    axs[1].set_ylim(-1, 1)
     axs[1].set_xlim(0, len(audio_test))
     axs[1].set_xticks(tick_indices, tick_times)
-    axs[1].set_xlabel("Time in seconds")
-    axs[1].set_ylabel("Amplitude")
+    axs[1].tick_params(axis='x', labelsize=MAIN_LABEL_FONT_SIZE)
+    axs[1].set_xlabel("Time in seconds", fontsize=MAIN_LABEL_FONT_SIZE)
+
+    axs[1].set_ylim(-1, 1)
+    axs[1].set_ylabel("Amplitude", fontsize=MAIN_LABEL_FONT_SIZE)
     axs[1].set_yticks([0], [None])
+    axs[1].tick_params(axis='y', labelsize=MAIN_LABEL_FONT_SIZE)
 
     if file_path == "":
         str_file_path = config_file["dataset_name"]
@@ -492,9 +512,10 @@ def plot_asr_confidence_along_waveform(
     if df_row["total_wav_segments"] > 1:
         str_wav_segment = f"(segment: {file_segment}), "
 
-    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}\nASR Confidence For Each Word", fontsize=14)
+    plt.suptitle(f"File: {str_file_path}, {str_wav_segment}\nASR Confidence For Each Word", fontsize=TITLE_FONT_SIZE)
 
-    plt.savefig(os.path.join(output_dir, f"{file_segment}_ASR_Confidence.png"), dpi=100)
+    plt.tight_layout(pad=SUPTITLE_PAD)
+    plt.savefig(os.path.join(output_dir, f"{file_segment}_ASR_Confidence.png"), dpi=DPI_AMOUNT, bbox_inches='tight')
     plt.clf()
     plt.close()
 
