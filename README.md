@@ -1,6 +1,6 @@
-# Multi-Scale Synthetic Speech Evaluation Framework
+# eXplainable SQ-AST (XSQ-AST) An Explainable Audio Spectrogram Transformer Framework for Localising Synthetic Speech Artifacts
 
-A multi-scale framework for synthetic speech quality evaluation for quality assurance.
+A framework for synthetic speech quality evaluation for quality assurance.
 
 ## Overview
 
@@ -71,4 +71,4 @@ See the LICENSE file and third-party-licenses.txt for license information.
 **Project Co-Leads**: Luca Resti (University of York), James Walker (University of York)<br>
 **Lead Developer**: Ben Heritage (University of York)
 
-Project supported by the CoSTAR Network via the EPSRC IAA CoSTAR Live Lab Researcher Mobility fund.
+This work was supported by EPSRC (Engineering and Physical Sciences Research Council) Impact Accelerator award EP/X525856/1 and by CoSTAR (Convergent Screen Technologies and Performance in Realtime) Live Lab, funded by the Arts and Humanities Research Council, grant reference AH/Y001079/1
