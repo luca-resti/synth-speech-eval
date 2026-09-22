@@ -66,6 +66,28 @@ create_image.bat
 
 See the LICENSE file and third-party-licenses.txt for license information.
 
+## Citing this Repository
+
+
+Plain text:
+```
+B. Heritage, L. Resti, M. V. Aylagas, T. Mehlenbacher, K. Tollmar, and J. A. Walker, “XSQ-AST: An Explainable Audio Spectrogram Transformer Framework for Localising Synthetic Speech Artifacts,” 2026. [Online]. Available: https://doi.org/10.48550/arXiv.2609.24770
+```
+
+BibTeX:
+```bibtex
+@misc{xsq-ast2026,
+    title={{XSQ-AST: An Explainable Audio Spectrogram Transformer Framework for Localising Synthetic Speech Artifacts}}, 
+    author={Ben Heritage and Luca Resti and Mónica Villanueva Aylagas and Timothy Mehlenbacher and Konrad Tollmar and James Alfred Walker},
+    year={2026},
+    eprint={2609.24770},
+    archivePrefix={arXiv},
+    primaryClass={eess.AS},
+    doi = {10.48550/arXiv.2609.24770},
+    url = {https://doi.org/10.48550/arXiv.2609.24770},
+}
+```
+
 ## Acknowledgements
 
 **Project Co-Leads**: Luca Resti (University of York), James Walker (University of York)<br>
